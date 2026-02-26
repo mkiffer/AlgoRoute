@@ -37,7 +37,7 @@ go build -o algoroute ./backend
 go mod tidy
 ```
 
-Tests live in `/tests/` subdirectories within each package. Test fixtures are in `testdata/` directories.
+Tests live in `tests/` subdirectories within each package. Test fixtures are in `testdata/` directories.
 
 ## Architecture
 
@@ -52,24 +52,25 @@ Layered design — each layer depends only on layers below it:
 
 ## Conventions
 - Test packages use `_test` suffix (e.g., `package overpass_test`)
+- External test packages live in a `tests/` subdirectory (e.g., `geo/tests/`, `services/tests/`)
 - Errors wrapped with context: `fmt.Errorf("read file %q: %w", path, err)`
 - Helper functions in tests prefixed `must` (e.g., `mustAddNode`, `mustAddEdge`)
 - Maps for O(1) lookups; adjacency list for graph traversal
+- All source files formatted with `gofmt`
 
 ## Current State
 
 | Component | Status |
 |-----------|--------|
-| Graph core (`graph/`) | Complete |
-| OSM API client (`api/overpass/`) | Complete |
-| Data mapping (`mapping/`) | Complete |
-| Geo utilities (`geo/`) | Complete |
+| Graph core (`graph/`) | Complete — 2 passing tests |
+| OSM API client (`api/overpass/`) | Complete — 1 passing test |
+| Data mapping (`mapping/`) | Complete — 1 passing test |
+| Geo utilities (`geo/`) | Complete — 6 passing tests |
 | Dijkstra algorithm (`routefinding/dijkstra.go`) | Complete — 5 passing tests |
 | A* algorithm (`routefinding/astar.go`) | Complete — 5 passing tests |
 | Router interface (`routefinding/router.go`) | Complete — `DijkstraRouter` and `AStarRouter` wrappers |
-| Service layer (`services/`) | Complete — orchestrates load → route → result |
-| `main.go` | Complete — flag-based CLI |
+| Service layer (`services/`) | Complete — 8 passing tests |
+| `main.go` | Complete — flag-based CLI (`-data`, `-start`, `-end`, `-algo`) |
 | Frontend | Empty |
 
-## Known Issues
-- `api/overpass/tests` and `mapping/tests` reference a missing fixture `testdata/sample_overpass.json`
+All 28 tests pass across 6 packages (`go test ./...`).
