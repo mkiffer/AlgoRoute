@@ -7,8 +7,6 @@ import (
 const earthRadiusMeters = 6371000.0
 
 func DistanceMeters(a, b Coord) float64 {
-
-	// Haversine
 	lat1 := a.Lat * math.Pi / 180.0
 	lat2 := b.Lat * math.Pi / 180.0
 	dLat := (b.Lat - a.Lat) * math.Pi / 180.0

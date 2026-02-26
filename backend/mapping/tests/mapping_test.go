@@ -12,9 +12,9 @@ import (
 func TestBuildNetwork_Smoke(t *testing.T) {
 	path := filepath.Join("testdata", "sample_overpass.json")
 
-	resp, err := overpass.LoadNetworkFromJson(path)
+	resp, err := overpass.LoadNetworkFromJSON(path)
 	if err != nil {
-		t.Fatalf("LoadNetworkFromJson: %v", err)
+		t.Fatalf("LoadNetworkFromJSON: %v", err)
 	}
 
 	opts := mapping.BuildOptions{
@@ -41,7 +41,7 @@ func TestBuildNetwork_Smoke(t *testing.T) {
 	}
 
 	// Optional: check no self-loops (common mapping bug)
-	for from, edges := range net.Adj {
+	for from, edges := range net.AdjacencyList {
 		for _, e := range edges {
 			if e.From != from {
 				t.Fatalf("edge.From mismatch: map key %v but edge.From %v", from, e.From)
@@ -66,7 +66,7 @@ func TestBuildNetwork_Smoke(t *testing.T) {
 
 func countEdges(net *graph.Network) int {
 	total := 0
-	for _, edges := range net.Adj {
+	for _, edges := range net.AdjacencyList {
 		total += len(edges)
 	}
 	return total

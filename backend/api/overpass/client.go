@@ -41,29 +41,29 @@ type Element struct {
 	Tags map[string]string `json:"tags,omitempty"`
 }
 
-func LoadNetworkFromJson(jsonFilePath string) (Response, error) {
+func LoadNetworkFromJSON(jsonFilePath string) (Response, error) {
 	data, err := os.ReadFile(jsonFilePath)
 	if err != nil {
 		return Response{}, fmt.Errorf("read file %q: %w", jsonFilePath, err)
 	}
 
-	var resp Response
-	if err := json.Unmarshal(data, &resp); err != nil {
+	var response Response
+	if err := json.Unmarshal(data, &response); err != nil {
 		return Response{}, fmt.Errorf("unmarshal overpass response: %w", err)
 	}
 
-	resp.NodeByID = make(map[int64]Element)
-	for _, element := range resp.Elements {
+	response.NodeByID = make(map[int64]Element)
+	for _, element := range response.Elements {
 		switch element.Type {
 		case "way":
-			resp.Ways = append(resp.Ways, element)
+			response.Ways = append(response.Ways, element)
 		case "node":
-			resp.Nodes = append(resp.Nodes, element)
-			resp.NodeByID[element.Id] = element
+			response.Nodes = append(response.Nodes, element)
+			response.NodeByID[element.Id] = element
 		}
 	}
 
-	return resp, nil
+	return response, nil
 }
 
 func (e Element) IsWay() bool  { return e.Type == "way" }

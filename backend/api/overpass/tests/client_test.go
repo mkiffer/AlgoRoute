@@ -11,7 +11,7 @@ func TestLoadNetworkFromJSON_ParsesElementsAndSplitsWaysNodes(t *testing.T) {
 	// Keep it small so tests stay fast and stable.
 	path := filepath.Join("testdata", "sample_overpass.json")
 
-	resp, err := overpass.LoadNetworkFromJson(path)
+	resp, err := overpass.LoadNetworkFromJSON(path)
 	if err != nil {
 		t.Fatalf("LoadNetworkFromJSON returned error: %v", err)
 	}

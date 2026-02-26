@@ -15,7 +15,7 @@ func main() {
 	dataFile := flag.String("data", "", "path to OSM JSON file")
 	startID := flag.Int64("start", 0, "start node ID")
 	endID := flag.Int64("end", 0, "end node ID")
-	algo := flag.String("algo", "dijkstra", "routing algorithm: dijkstra or astar")
+	algo := flag.String("algo", services.AlgorithmDijkstra, "routing algorithm: dijkstra or astar")
 	flag.Parse()
 
 	if *dataFile == "" || *startID == 0 || *endID == 0 {
@@ -23,12 +23,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc, err := services.NewRoutingService(*algo)
+	routingService, err := services.NewRoutingService(*algo)
 	if err != nil {
 		log.Fatalf("create routing service: %v", err)
 	}
 
-	req := services.RouteRequest{
+	routeRequest := services.RouteRequest{
 		DataFile:  *dataFile,
 		StartNode: graph.NodeID(*startID),
 		GoalNode:  graph.NodeID(*endID),
@@ -36,7 +36,7 @@ func main() {
 		MapOpts:   mapping.BuildOptions{AssumeBidirectional: true},
 	}
 
-	result, err := svc.Route(req)
+	result, err := routingService.Route(routeRequest)
 	if err != nil {
 		log.Fatalf("route: %v", err)
 	}

@@ -3,22 +3,22 @@ package graph
 import "fmt"
 
 type Network struct {
-	Nodes map[NodeID]Node   //node within the network
-	Adj   map[NodeID][]Edge //adjacency list for the network
+	Nodes         map[NodeID]Node
+	AdjacencyList map[NodeID][]Edge
 }
 
 func NewNetwork() *Network {
 	return &Network{
-		Nodes: make(map[NodeID]Node),
-		Adj:   make(map[NodeID][]Edge),
+		Nodes:         make(map[NodeID]Node),
+		AdjacencyList: make(map[NodeID][]Edge),
 	}
 }
 
 func (n *Network) AddNode(node Node) {
 	n.Nodes[node.ID] = node
 	// Ensure key exists so Neighbours() never returns nil.
-	if _, exists := n.Adj[node.ID]; !exists {
-		n.Adj[node.ID] = nil
+	if _, exists := n.AdjacencyList[node.ID]; !exists {
+		n.AdjacencyList[node.ID] = nil
 	}
 }
 
@@ -33,12 +33,10 @@ func (n *Network) AddEdge(edge Edge) error {
 		return fmt.Errorf("AddEdge: negative edge weight %v ", edge.Weight)
 	}
 
-	n.Adj[edge.From] = append(n.Adj[edge.From], edge)
+	n.AdjacencyList[edge.From] = append(n.AdjacencyList[edge.From], edge)
 	return nil
-
 }
 
 func (n *Network) Neighbours(nodeID NodeID) []Edge {
-
-	return n.Adj[nodeID]
+	return n.AdjacencyList[nodeID]
 }

@@ -27,24 +27,24 @@ var bidirectionalOpts = mapping.BuildOptions{AssumeBidirectional: true}
 // --- NewRoutingService ---
 
 func TestNewRoutingService_Dijkstra_ReturnsService(t *testing.T) {
-	service, err := services.NewRoutingService("dijkstra")
+	service, err := services.NewRoutingService(services.AlgorithmDijkstra)
 
 	if err != nil {
-		t.Fatalf("NewRoutingService(\"dijkstra\"): unexpected error: %v", err)
+		t.Fatalf("NewRoutingService(AlgorithmDijkstra): unexpected error: %v", err)
 	}
 	if service == nil {
-		t.Errorf("NewRoutingService(\"dijkstra\"): expected non-nil service, got nil")
+		t.Errorf("NewRoutingService(AlgorithmDijkstra): expected non-nil service, got nil")
 	}
 }
 
 func TestNewRoutingService_AStar_ReturnsService(t *testing.T) {
-	service, err := services.NewRoutingService("astar")
+	service, err := services.NewRoutingService(services.AlgorithmAStar)
 
 	if err != nil {
-		t.Fatalf("NewRoutingService(\"astar\"): unexpected error: %v", err)
+		t.Fatalf("NewRoutingService(AlgorithmAStar): unexpected error: %v", err)
 	}
 	if service == nil {
-		t.Errorf("NewRoutingService(\"astar\"): expected non-nil service, got nil")
+		t.Errorf("NewRoutingService(AlgorithmAStar): expected non-nil service, got nil")
 	}
 }
 
@@ -61,12 +61,12 @@ func TestNewRoutingService_UnknownAlgorithm_ReturnsError(t *testing.T) {
 // --- RoutingService.Route ---
 
 func TestRoute_Dijkstra_FindsPathBetweenFixtureNodes(t *testing.T) {
-	service, _ := services.NewRoutingService("dijkstra")
+	service, _ := services.NewRoutingService(services.AlgorithmDijkstra)
 	request := services.RouteRequest{
 		DataFile:  filepath.Join("testdata", "sample_overpass.json"),
 		StartNode: graph.NodeID(1001),
 		GoalNode:  graph.NodeID(1003),
-		Algorithm: "dijkstra",
+		Algorithm: services.AlgorithmDijkstra,
 		MapOpts:   bidirectionalOpts,
 	}
 
@@ -87,8 +87,8 @@ func TestRoute_Dijkstra_FindsPathBetweenFixtureNodes(t *testing.T) {
 	if result.Distance <= 0 {
 		t.Errorf("Route: distance = %v, want > 0", result.Distance)
 	}
-	if result.Algorithm != "dijkstra" {
-		t.Errorf("Route: algorithm = %q, want \"dijkstra\"", result.Algorithm)
+	if result.Algorithm != services.AlgorithmDijkstra {
+		t.Errorf("Route: algorithm = %q, want %q", result.Algorithm, services.AlgorithmDijkstra)
 	}
 }
 
@@ -96,12 +96,12 @@ func TestRoute_AStar_FindsPathBetweenFixtureNodes(t *testing.T) {
 	// A* must produce the same start/end as Dijkstra on this network.
 	// Algorithm correctness is covered in routefinding/; this test verifies
 	// the service wires the algorithm through end-to-end correctly.
-	service, _ := services.NewRoutingService("astar")
+	service, _ := services.NewRoutingService(services.AlgorithmAStar)
 	request := services.RouteRequest{
 		DataFile:  filepath.Join("testdata", "sample_overpass.json"),
 		StartNode: graph.NodeID(1001),
 		GoalNode:  graph.NodeID(1003),
-		Algorithm: "astar",
+		Algorithm: services.AlgorithmAStar,
 		MapOpts:   bidirectionalOpts,
 	}
 
@@ -113,13 +113,13 @@ func TestRoute_AStar_FindsPathBetweenFixtureNodes(t *testing.T) {
 	if result.Path[0] != graph.NodeID(1001) || result.Path[len(result.Path)-1] != graph.NodeID(1003) {
 		t.Errorf("Route: expected path 1001→…→1003, got %v", result.Path)
 	}
-	if result.Algorithm != "astar" {
-		t.Errorf("Route: algorithm = %q, want \"astar\"", result.Algorithm)
+	if result.Algorithm != services.AlgorithmAStar {
+		t.Errorf("Route: algorithm = %q, want %q", result.Algorithm, services.AlgorithmAStar)
 	}
 }
 
 func TestRoute_MissingDataFile_ReturnsError(t *testing.T) {
-	service, _ := services.NewRoutingService("dijkstra")
+	service, _ := services.NewRoutingService(services.AlgorithmDijkstra)
 	request := services.RouteRequest{
 		DataFile:  "nonexistent.json",
 		StartNode: graph.NodeID(1),

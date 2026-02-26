@@ -17,49 +17,54 @@ func AStar(net *graph.Network, start, goal graph.NodeID) ([]graph.NodeID, float6
 	}
 
 	goalCoord := net.Nodes[goal].Coord
-	h := func(n graph.NodeID) float64 {
-		return geo.DistanceMeters(net.Nodes[n].Coord, goalCoord)
+	estimateCostToGoal := func(nodeID graph.NodeID) float64 {
+		return geo.DistanceMeters(net.Nodes[nodeID].Coord, goalCoord)
 	}
 
-	dist := make(map[graph.NodeID]float64, len(net.Nodes))
-	prev := make(map[graph.NodeID]graph.NodeID, len(net.Nodes))
+	bestKnownCostTo := make(map[graph.NodeID]float64, len(net.Nodes))
+	arrivedViaNode := make(map[graph.NodeID]graph.NodeID, len(net.Nodes))
 	for id := range net.Nodes {
-		dist[id] = math.Inf(1)
+		bestKnownCostTo[id] = math.Inf(1)
 	}
-	dist[start] = 0
+	bestKnownCostTo[start] = 0
 
-	pq := &priorityQueue{{node: start, cost: h(start)}}
-	heap.Init(pq)
+	openSet := &priorityQueue{{node: start, cost: estimateCostToGoal(start)}}
+	heap.Init(openSet)
 
-	for pq.Len() > 0 {
-		cur := heap.Pop(pq).(*pqItem)
+	for openSet.Len() > 0 {
+		currentEntry := heap.Pop(openSet).(*heapEntry)
 
-		// Stale-entry check: f stored in cur.cost vs current best f for this node.
-		if cur.cost > dist[cur.node]+h(cur.node) {
+		// Lazy-deletion stale check: heapEntry.cost stores f = g + h at push time.
+		// We compare it against the current best f (recomputed from the latest g)
+		// rather than against g directly, because g is not stored in the entry —
+		// only f is. An alternative would be to add a gCost field to heapEntry, but
+		// that would require modifying the struct shared with Dijkstra. Entries where
+		// a cheaper g (and therefore cheaper f) was found since the push are discarded.
+		if currentEntry.cost > bestKnownCostTo[currentEntry.node]+estimateCostToGoal(currentEntry.node) {
 			continue
 		}
-		if cur.node == goal {
+		if currentEntry.node == goal {
 			break
 		}
 
-		for _, edge := range net.Neighbours(cur.node) {
-			newG := dist[cur.node] + edge.Weight
-			if newG < dist[edge.To] {
-				dist[edge.To] = newG
-				prev[edge.To] = cur.node
-				heap.Push(pq, &pqItem{node: edge.To, cost: newG + h(edge.To)})
+		for _, edge := range net.Neighbours(currentEntry.node) {
+			tentativeCostToReach := bestKnownCostTo[currentEntry.node] + edge.Weight
+			if tentativeCostToReach < bestKnownCostTo[edge.To] {
+				bestKnownCostTo[edge.To] = tentativeCostToReach
+				arrivedViaNode[edge.To] = currentEntry.node
+				heap.Push(openSet, &heapEntry{node: edge.To, cost: tentativeCostToReach + estimateCostToGoal(edge.To)})
 			}
 		}
 	}
 
-	if math.IsInf(dist[goal], 1) {
+	if math.IsInf(bestKnownCostTo[goal], 1) {
 		return nil, 0, fmt.Errorf("astar: no path from %v to %v", start, goal)
 	}
 
-	// Reconstruct path by walking prev map backwards.
+	// Reconstruct path by walking arrivedViaNode map backwards.
 	var path []graph.NodeID
-	for n := goal; n != start; n = prev[n] {
-		path = append(path, n)
+	for current := goal; current != start; current = arrivedViaNode[current] {
+		path = append(path, current)
 	}
 	path = append(path, start)
 
@@ -68,5 +73,5 @@ func AStar(net *graph.Network, start, goal graph.NodeID) ([]graph.NodeID, float6
 		path[i], path[j] = path[j], path[i]
 	}
 
-	return path, dist[goal], nil
+	return path, bestKnownCostTo[goal], nil
 }

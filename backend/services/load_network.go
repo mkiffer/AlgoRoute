@@ -10,7 +10,7 @@ import (
 
 // LoadNetworkFromFile reads an OSM JSON file and builds a routing network.
 func LoadNetworkFromFile(path string, opts mapping.BuildOptions) (*graph.Network, error) {
-	resp, err := overpass.LoadNetworkFromJson(path)
+	resp, err := overpass.LoadNetworkFromJSON(path)
 	if err != nil {
 		return nil, fmt.Errorf("load network from file %q: %w", path, err)
 	}

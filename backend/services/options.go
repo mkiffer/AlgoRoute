@@ -5,11 +5,16 @@ import (
 	"algoroute/mapping"
 )
 
+const (
+	AlgorithmDijkstra = "dijkstra"
+	AlgorithmAStar    = "astar"
+)
+
 // RouteRequest describes the inputs for a routing operation.
 type RouteRequest struct {
 	DataFile  string // path to OSM JSON file
 	StartNode graph.NodeID
 	GoalNode  graph.NodeID
-	Algorithm string // "dijkstra" or "astar"
+	Algorithm string // AlgorithmDijkstra or AlgorithmAStar
 	MapOpts   mapping.BuildOptions
 }

@@ -8,13 +8,25 @@ import (
 	"algoroute/graph"
 )
 
-type pqItem struct {
+// priorityQueue implements heap.Interface as a binary min-heap ordered by cost.
+//
+// A binary min-heap is used so that popping the lowest-cost node costs O(log n)
+// rather than O(n) for a linear scan. This matters because Dijkstra performs one
+// pop per settled node and up to one push per edge relaxation.
+//
+// Go's container/heap does not support decrease-key, so we use lazy deletion
+// instead: when a node is relaxed we push a new entry rather than updating the
+// existing one. Stale entries (those whose stored cost is higher than the current
+// best) are discarded when popped. This trades a modest increase in heap size for
+// a much simpler implementation than a Fibonacci heap or an indexed heap with
+// decrease-key.
+type heapEntry struct {
 	node graph.NodeID
 	cost float64
 	idx  int
 }
 
-type priorityQueue []*pqItem
+type priorityQueue []*heapEntry
 
 func (pq priorityQueue) Len() int           { return len(pq) }
 func (pq priorityQueue) Less(i, j int) bool { return pq[i].cost < pq[j].cost }
@@ -24,17 +36,17 @@ func (pq priorityQueue) Swap(i, j int) {
 	pq[j].idx = j
 }
 func (pq *priorityQueue) Push(x any) {
-	item := x.(*pqItem)
-	item.idx = len(*pq)
-	*pq = append(*pq, item)
+	entry := x.(*heapEntry)
+	entry.idx = len(*pq)
+	*pq = append(*pq, entry)
 }
 func (pq *priorityQueue) Pop() any {
 	old := *pq
 	n := len(old)
-	item := old[n-1]
+	entry := old[n-1]
 	old[n-1] = nil
 	*pq = old[:n-1]
-	return item
+	return entry
 }
 
 // Dijkstra returns the shortest path and its cost from start to goal.
@@ -47,44 +59,47 @@ func Dijkstra(
 		return []graph.NodeID{start}, 0, nil
 	}
 
-	dist := make(map[graph.NodeID]float64, len(net.Nodes))
-	prev := make(map[graph.NodeID]graph.NodeID, len(net.Nodes))
+	bestKnownCostTo := make(map[graph.NodeID]float64, len(net.Nodes))
+	arrivedViaNode := make(map[graph.NodeID]graph.NodeID, len(net.Nodes))
 	for id := range net.Nodes {
-		dist[id] = math.Inf(1)
+		bestKnownCostTo[id] = math.Inf(1)
 	}
-	dist[start] = 0
+	bestKnownCostTo[start] = 0
 
-	pq := &priorityQueue{{node: start, cost: 0}}
-	heap.Init(pq)
+	openSet := &priorityQueue{{node: start, cost: 0}}
+	heap.Init(openSet)
 
-	for pq.Len() > 0 {
-		cur := heap.Pop(pq).(*pqItem)
+	for openSet.Len() > 0 {
+		currentEntry := heap.Pop(openSet).(*heapEntry)
 
-		if cur.cost > dist[cur.node] {
-			continue // stale entry
+		// Lazy-deletion stale check: skip entries pushed before a cheaper path
+		// to this node was found. Without this, we would re-expand the node and
+		// redundantly relax its neighbours using a suboptimal cost.
+		if currentEntry.cost > bestKnownCostTo[currentEntry.node] {
+			continue
 		}
-		if cur.node == goal {
+		if currentEntry.node == goal {
 			break
 		}
 
-		for _, edge := range net.Neighbours(cur.node) {
-			newCost := dist[cur.node] + edge.Weight
-			if newCost < dist[edge.To] {
-				dist[edge.To] = newCost
-				prev[edge.To] = cur.node
-				heap.Push(pq, &pqItem{node: edge.To, cost: newCost})
+		for _, edge := range net.Neighbours(currentEntry.node) {
+			newCost := bestKnownCostTo[currentEntry.node] + edge.Weight
+			if newCost < bestKnownCostTo[edge.To] {
+				bestKnownCostTo[edge.To] = newCost
+				arrivedViaNode[edge.To] = currentEntry.node
+				heap.Push(openSet, &heapEntry{node: edge.To, cost: newCost})
 			}
 		}
 	}
 
-	if math.IsInf(dist[goal], 1) {
+	if math.IsInf(bestKnownCostTo[goal], 1) {
 		return nil, 0, fmt.Errorf("dijkstra: no path from %v to %v", start, goal)
 	}
 
-	// Reconstruct path by walking prev map backwards.
+	// Reconstruct path by walking arrivedViaNode map backwards.
 	var path []graph.NodeID
-	for n := goal; n != start; n = prev[n] {
-		path = append(path, n)
+	for current := goal; current != start; current = arrivedViaNode[current] {
+		path = append(path, current)
 	}
 	path = append(path, start)
 
@@ -93,5 +108,5 @@ func Dijkstra(
 		path[i], path[j] = path[j], path[i]
 	}
 
-	return path, dist[goal], nil
+	return path, bestKnownCostTo[goal], nil
 }
