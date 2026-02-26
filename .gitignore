@@ -1,0 +1,18 @@
+# Build output
+backend/algoroute
+
+# Raw OSM data files — large, not source code
+backend/*.json
+
+# Go test cache
+**/.testcache
+
+# Claude Code local data
+.claude/
+
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
