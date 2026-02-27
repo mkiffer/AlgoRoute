@@ -41,6 +41,7 @@
       border: 1px solid #ccc;
       border-radius: 4px;
       font-size: 0.95rem;
+      width: 100%;
     }
 
     #find-route-button {
@@ -69,17 +70,62 @@
     #status-message.error { color: #dc2626; }
 
     #map { flex: 1; }
+
+    /* Autocomplete */
+    .autocomplete-wrapper {
+      position: relative;
+    }
+
+    .autocomplete-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      list-style: none;
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 1000;
+      display: none;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .autocomplete-item {
+      padding: 7px 10px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .autocomplete-item:last-child { border-bottom: none; }
+
+    .autocomplete-item:hover,
+    .autocomplete-item.active {
+      background: #eff6ff;
+    }
   </style>
 </head>
 <body>
   <div id="controls">
     <label>
       Origin
-      <input id="origin-input" type="text" placeholder="e.g. Glenhuntly Rd, Elsternwick" />
+      <div class="autocomplete-wrapper">
+        <input id="origin-input" type="text" placeholder="e.g. Glenhuntly Rd, Elsternwick" autocomplete="off" />
+        <ul id="origin-suggestions" class="autocomplete-dropdown"></ul>
+      </div>
     </label>
     <label>
       Destination
-      <input id="destination-input" type="text" placeholder="e.g. Chapel St, South Yarra" />
+      <div class="autocomplete-wrapper">
+        <input id="destination-input" type="text" placeholder="e.g. Chapel St, South Yarra" autocomplete="off" />
+        <ul id="destination-suggestions" class="autocomplete-dropdown"></ul>
+      </div>
     </label>
     <label>
       Algorithm
@@ -106,12 +152,127 @@
     let routePolyline = null;
     const markerGroup = L.layerGroup().addTo(map);
 
-    document.getElementById('find-route-button').addEventListener('click', findRoute);
-    document.getElementById('origin-input').addEventListener('keydown', submitOnEnter);
-    document.getElementById('destination-input').addEventListener('keydown', submitOnEnter);
+    // Set up autocomplete before attaching the find-route button listener so
+    // the autocomplete keydown handler fires first and can suppress form submission
+    // when the user presses Enter to select a suggestion.
+    setupAutocomplete(
+      document.getElementById('origin-input'),
+      document.getElementById('origin-suggestions')
+    );
+    setupAutocomplete(
+      document.getElementById('destination-input'),
+      document.getElementById('destination-suggestions')
+    );
 
-    function submitOnEnter(event) {
-      if (event.key === 'Enter') findRoute();
+    document.getElementById('find-route-button').addEventListener('click', findRoute);
+
+    // Minimum characters before a suggestion fetch is triggered. Fewer than
+    // two characters produce too many irrelevant results from Nominatim.
+    const AUTOCOMPLETE_MIN_QUERY_LENGTH = 2;
+
+    // Debounce delay in milliseconds between the last keypress and the fetch.
+    // 300 ms is long enough to avoid hammering Nominatim on every keystroke
+    // while short enough that the dropdown feels responsive.
+    const AUTOCOMPLETE_DEBOUNCE_MS = 300;
+
+    // setupAutocomplete wires predictive address suggestions to an input element.
+    // Suggestions are fetched from GET /api/suggest?q=<query> with a debounce.
+    // Keyboard: ArrowDown/ArrowUp navigate, Enter selects or submits, Escape closes.
+    function setupAutocomplete(inputEl, dropdownEl) {
+      let debounceTimer = null;
+      let activeIndex   = -1;
+      let suggestions   = [];
+
+      inputEl.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        const query = inputEl.value.trim();
+        if (query.length < AUTOCOMPLETE_MIN_QUERY_LENGTH) {
+          closeDropdown();
+          return;
+        }
+        debounceTimer = setTimeout(() => fetchSuggestions(query), AUTOCOMPLETE_DEBOUNCE_MS);
+      });
+
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          activeIndex = Math.min(activeIndex + 1, suggestions.length - 1);
+          highlightActive();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          activeIndex = Math.max(activeIndex - 1, -1);
+          highlightActive();
+        } else if (e.key === 'Enter') {
+          if (activeIndex >= 0 && suggestions[activeIndex]) {
+            // Select the highlighted suggestion and suppress form submission.
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            selectSuggestion(suggestions[activeIndex]);
+          } else {
+            // No suggestion active — close dropdown and submit the route.
+            closeDropdown();
+            findRoute();
+          }
+        } else if (e.key === 'Escape') {
+          closeDropdown();
+        }
+      });
+
+      // Delay closing so a mousedown on a list item fires before blur removes it.
+      inputEl.addEventListener('blur', () => setTimeout(closeDropdown, 150));
+
+      async function fetchSuggestions(query) {
+        try {
+          const suggestResponse = await fetch('/api/suggest?q=' + encodeURIComponent(query));
+          if (!suggestResponse.ok) return;
+          suggestions  = await suggestResponse.json();
+          activeIndex  = -1;
+          renderDropdown();
+        } catch {
+          // Suggestions are non-critical — fail silently.
+        }
+      }
+
+      function renderDropdown() {
+        dropdownEl.innerHTML = '';
+        if (!suggestions || suggestions.length === 0) {
+          closeDropdown();
+          return;
+        }
+        suggestions.forEach((suggestion) => {
+          const li = document.createElement('li');
+          li.className   = 'autocomplete-item';
+          li.textContent = suggestion.display_name;
+          // mousedown fires before blur so the item click is not swallowed.
+          li.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            selectSuggestion(suggestion);
+          });
+          dropdownEl.appendChild(li);
+        });
+        dropdownEl.style.display = 'block';
+      }
+
+      function highlightActive() {
+        const items = dropdownEl.querySelectorAll('.autocomplete-item');
+        items.forEach((item, i) => item.classList.toggle('active', i === activeIndex));
+        // Scroll the highlighted item into view inside the dropdown.
+        if (activeIndex >= 0 && items[activeIndex]) {
+          items[activeIndex].scrollIntoView({ block: 'nearest' });
+        }
+      }
+
+      function selectSuggestion(suggestion) {
+        inputEl.value = suggestion.display_name;
+        closeDropdown();
+      }
+
+      function closeDropdown() {
+        dropdownEl.style.display = 'none';
+        dropdownEl.innerHTML     = '';
+        activeIndex              = -1;
+        suggestions              = [];
+      }
     }
 
     async function findRoute() {

@@ -1,14 +1,13 @@
 /*
-Tests for: server/handlers.go — POST /api/route HTTP handler.
-Coverage intent: valid request produces a 200 with path and distance, missing
-fields produce a 400, and an unroutable request produces a 500 with an error
-body. Uses httptest to call the handler directly — no live external calls.
+Tests for: server/handlers.go — HTTP handlers for POST /api/route and GET /api/suggest.
+Coverage intent:
+  - /api/route: valid request → 200 with path and distance; missing fields → 400;
+    invalid JSON → 400.
+  - /api/suggest: empty query → 200 with []; valid query → 200 with parsed suggestions;
+    Nominatim failure → 200 with [] (graceful degradation).
 
-The handler under test itself calls RouteByAddress, so both geocoding and
-Overpass are stubbed via the GeocoderBaseURL/OverpassBaseURL fields on
-AddressRouteRequest. Because handleRoute constructs the request internally, the
-handler must be wired to accept override URLs for testing; those are injected
-via ServerOptions.
+Uses httptest to call handlers directly — no live external calls.
+Geocoding and Overpass are stubbed via URL override fields on server.Options.
 */
 package server_test
 
@@ -148,6 +147,135 @@ func TestHandleRoute_InvalidJSON_Returns400(t *testing.T) {
 		t.Errorf(
 			"POST /api/route with invalid JSON: got status %d, want 400",
 			recorder.Code,
+		)
+	}
+}
+
+// nominatimSuggestStubHandler returns a Nominatim-shaped JSON response for
+// address autocomplete — includes display_name in addition to lat/lon.
+func nominatimSuggestStubHandler(results []map[string]string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, _ := json.Marshal(results)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}
+}
+
+func TestHandleSuggest_EmptyQuery_Returns200WithEmptyJSONArray(t *testing.T) {
+	// A request with no ?q= parameter must return 200 with an empty JSON array,
+	// not a 400 or 500 — the frontend calls suggest on every keypress and an
+	// empty field must simply yield no results.
+	srv := server.NewWithOptions(server.Options{StaticDir: "."})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/suggest", nil)
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"GET /api/suggest with no query: got status %d, want 200",
+			recorder.Code,
+		)
+	}
+	var suggestions []interface{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &suggestions); err != nil {
+		t.Fatalf("GET /api/suggest: response is not valid JSON: %v", err)
+	}
+	if len(suggestions) != 0 {
+		t.Errorf(
+			"GET /api/suggest with no query: got %d suggestions, want 0 — empty query must return []",
+			len(suggestions),
+		)
+	}
+}
+
+func TestHandleSuggest_ValidQuery_ReturnsParsedSuggestions(t *testing.T) {
+	// A well-formed ?q= request must return the display_name, lat, and lon from
+	// Nominatim. The server proxies the response so the frontend avoids CORS issues.
+	fakeHits := []map[string]string{
+		{
+			"display_name": "Chapel Street, South Yarra, Melbourne",
+			"lat":          "-37.8410",
+			"lon":          "144.9890",
+		},
+		{
+			"display_name": "Chapel Street, Prahran, Melbourne",
+			"lat":          "-37.8510",
+			"lon":          "144.9940",
+		},
+	}
+	suggestStub := httptest.NewServer(nominatimSuggestStubHandler(fakeHits))
+	defer suggestStub.Close()
+
+	srv := server.NewWithOptions(server.Options{
+		StaticDir:      ".",
+		SuggestBaseURL: suggestStub.URL,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/suggest?q=Chapel+St", nil)
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"GET /api/suggest?q=Chapel+St: got status %d, want 200. Body: %s",
+			recorder.Code, recorder.Body.String(),
+		)
+	}
+	var suggestions []map[string]interface{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &suggestions); err != nil {
+		t.Fatalf("GET /api/suggest: response is not valid JSON: %v", err)
+	}
+	if len(suggestions) != 2 {
+		t.Fatalf(
+			"GET /api/suggest: got %d suggestions, want 2 — both stub results should be returned",
+			len(suggestions),
+		)
+	}
+	if suggestions[0]["display_name"] != "Chapel Street, South Yarra, Melbourne" {
+		t.Errorf(
+			"GET /api/suggest: suggestions[0].display_name = %v, want %q",
+			suggestions[0]["display_name"], "Chapel Street, South Yarra, Melbourne",
+		)
+	}
+}
+
+func TestHandleSuggest_NominatimFailure_Returns200WithEmptyJSONArray(t *testing.T) {
+	// When Nominatim is unavailable or rate-limits the request, the handler must
+	// return 200 [] rather than propagating the error. Suggestions are a UX
+	// enhancement — a Nominatim outage must not break the route-finding flow.
+	failingStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer failingStub.Close()
+
+	srv := server.NewWithOptions(server.Options{
+		StaticDir:      ".",
+		SuggestBaseURL: failingStub.URL,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/suggest?q=Chapel+St", nil)
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"GET /api/suggest with failing Nominatim: got status %d, want 200 — "+
+				"suggestions must degrade gracefully, not return an error",
+			recorder.Code,
+		)
+	}
+	var suggestions []interface{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &suggestions); err != nil {
+		t.Fatalf("GET /api/suggest: response is not valid JSON: %v", err)
+	}
+	if len(suggestions) != 0 {
+		t.Errorf(
+			"GET /api/suggest with failing Nominatim: got %d suggestions, want 0",
+			len(suggestions),
 		)
 	}
 }

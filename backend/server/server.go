@@ -24,6 +24,7 @@ type Options struct {
 	GeocoderBaseURL     string // base URL for origin geocoding (Nominatim)
 	DestGeocoderBaseURL string // base URL for destination geocoding (Nominatim)
 	OverpassBaseURL     string // base URL for Overpass road network fetch
+	SuggestBaseURL      string // base URL for address autocomplete suggestions (Nominatim)
 }
 
 // Server handles HTTP requests for AlgoRoute. It serves the static frontend
@@ -66,9 +67,11 @@ func (s *Server) registerRoutes() {
 	// frontend to reference CSS, JS, and other assets without additional routing.
 	s.mux.Handle("/", http.FileServer(http.Dir(s.opts.StaticDir)))
 
-	// POST /api/route is the sole API endpoint. The routing algorithm is
-	// chosen per-request via the "algorithm" field in the JSON body.
+	// POST /api/route finds a route between two addresses.
 	s.mux.HandleFunc("POST /api/route", s.handleRoute)
+
+	// GET /api/suggest returns address autocomplete suggestions from Nominatim.
+	s.mux.HandleFunc("GET /api/suggest", s.handleSuggest)
 }
 
 // newRoutingServiceForAlgorithm returns a RoutingService for the given
