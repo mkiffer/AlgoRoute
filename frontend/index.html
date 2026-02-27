@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AlgoRoute</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    #controls {
+      padding: 12px 16px;
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    #controls label {
+      font-size: 0.85rem;
+      color: #555;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    #controls input,
+    #controls select {
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+
+    #find-route-button {
+      padding: 8px 20px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      white-space: nowrap;
+    }
+
+    #find-route-button:disabled {
+      background: #93c5fd;
+      cursor: not-allowed;
+    }
+
+    #status-message {
+      font-size: 0.85rem;
+      color: #666;
+      padding: 4px 0;
+      width: 100%;
+    }
+
+    #status-message.error { color: #dc2626; }
+
+    #map { flex: 1; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label>
+      Origin
+      <input id="origin-input" type="text" placeholder="e.g. Glenhuntly Rd, Elsternwick" />
+    </label>
+    <label>
+      Destination
+      <input id="destination-input" type="text" placeholder="e.g. Chapel St, South Yarra" />
+    </label>
+    <label>
+      Algorithm
+      <select id="algorithm-select">
+        <option value="dijkstra">Dijkstra</option>
+        <option value="astar">A*</option>
+      </select>
+    </label>
+    <button id="find-route-button">Find Route</button>
+    <div id="status-message"></div>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([-37.82, 144.97], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // routePolyline and markerGroup are replaced on each new route request
+    // so old overlays are removed before the new ones are drawn.
+    let routePolyline = null;
+    const markerGroup = L.layerGroup().addTo(map);
+
+    document.getElementById('find-route-button').addEventListener('click', findRoute);
+    document.getElementById('origin-input').addEventListener('keydown', submitOnEnter);
+    document.getElementById('destination-input').addEventListener('keydown', submitOnEnter);
+
+    function submitOnEnter(event) {
+      if (event.key === 'Enter') findRoute();
+    }
+
+    async function findRoute() {
+      const originAddress      = document.getElementById('origin-input').value.trim();
+      const destinationAddress = document.getElementById('destination-input').value.trim();
+      const algorithm          = document.getElementById('algorithm-select').value;
+      const button             = document.getElementById('find-route-button');
+
+      if (!originAddress || !destinationAddress) {
+        showStatus('Please enter both an origin and a destination.', /*isError=*/true);
+        return;
+      }
+
+      button.disabled = true;
+      showStatus('Geocoding addresses and fetching road network\u2026');
+
+      try {
+        const response = await fetch('/api/route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origin:      originAddress,
+            destination: destinationAddress,
+            algorithm:   algorithm,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          showStatus('Error: ' + (data.error || response.statusText), /*isError=*/true);
+          return;
+        }
+
+        drawRoute(data, originAddress, destinationAddress);
+      } catch (networkError) {
+        showStatus('Network error: ' + networkError.message, /*isError=*/true);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function drawRoute(routeData, originAddress, destinationAddress) {
+      // Remove the previous route overlay before drawing the new one.
+      if (routePolyline) {
+        map.removeLayer(routePolyline);
+      }
+      markerGroup.clearLayers();
+
+      const pathLatLngs = routeData.path.map(node => [node.lat, node.lon]);
+      routePolyline = L.polyline(pathLatLngs, { color: '#2563eb', weight: 4 }).addTo(map);
+      map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
+
+      L.marker([routeData.origin_coord.lat, routeData.origin_coord.lon])
+        .bindPopup('<strong>Origin</strong><br>' + originAddress)
+        .addTo(markerGroup);
+
+      L.marker([routeData.destination_coord.lat, routeData.destination_coord.lon])
+        .bindPopup('<strong>Destination</strong><br>' + destinationAddress)
+        .addTo(markerGroup);
+
+      const distanceKm = (routeData.distance_meters / 1000).toFixed(2);
+      showStatus(
+        'Route found \u2014 ' + routeData.algorithm + ' \u2014 ' +
+        distanceKm + ' km \u2014 ' + routeData.path.length + ' nodes'
+      );
+    }
+
+    function showStatus(message, isError = false) {
+      const statusElement = document.getElementById('status-message');
+      statusElement.textContent = message;
+      statusElement.className = isError ? 'error' : '';
+    }
+  </script>
+</body>
+</html>

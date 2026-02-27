@@ -9,7 +9,7 @@ backend/*.json
 
 # Claude Code local data
 .claude/
-
+*/CLAUDE.md
 # macOS
 .DS_Store
 
