@@ -4,24 +4,39 @@
 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Coord, RouteResponse } from './types';
+import type { Coord, RouteResponse, MapStyle } from './types';
+import { TILE_LAYERS, DEFAULT_MAP_STYLE } from './config';
 
 export class MapController {
   private readonly map: L.Map;
   private readonly markerGroup:  L.LayerGroup;
   private readonly visitedGroup: L.LayerGroup;
   private routePolyline: L.Polyline | null = null;
+  private tileLayer: L.TileLayer;
 
   constructor(containerId: string) {
     this.map = L.map(containerId).setView([-37.82, 144.97], 13);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    const defaultConfig = TILE_LAYERS[DEFAULT_MAP_STYLE];
+    this.tileLayer = L.tileLayer(defaultConfig.url, {
+      attribution: defaultConfig.attribution,
+      detectRetina: true,
     }).addTo(this.map);
 
     this.markerGroup  = L.layerGroup().addTo(this.map);
     this.visitedGroup = L.layerGroup().addTo(this.map);
+  }
+
+  // setTileLayer swaps the background tile layer to the given style. The old
+  // layer is removed from the map before the new one is added so the two never
+  // overlap during the transition.
+  setTileLayer(style: MapStyle): void {
+    this.map.removeLayer(this.tileLayer);
+    const config = TILE_LAYERS[style];
+    this.tileLayer = L.tileLayer(config.url, {
+      attribution: config.attribution,
+      detectRetina: true,
+    }).addTo(this.map);
   }
 
   // fitToBounds adjusts the map viewport to show all given coordinates with

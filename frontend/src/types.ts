@@ -39,3 +39,6 @@ export type Algorithm = 'dijkstra' | 'astar';
 
 // AnimationSpeed maps to the keys in SPEED_CONFIG.
 export type AnimationSpeed = 'slow' | 'medium' | 'fast';
+
+// MapStyle is the set of tile layer styles available in the map style switcher.
+export type MapStyle = 'standard' | 'dark' | 'voyager' | 'minimal';

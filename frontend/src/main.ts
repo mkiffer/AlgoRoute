@@ -12,7 +12,7 @@ import { setupAutocomplete }   from './autocomplete';
 import { fetchRoute }          from './api';
 import * as ui                 from './ui';
 import { ALGORITHM_COLOUR }    from './config';
-import type { RouteResponse, AnimationSpeed } from './types';
+import type { RouteResponse, AnimationSpeed, MapStyle } from './types';
 
 // ---------------------------------------------------------------------------
 // Subsystem initialisation
@@ -42,6 +42,9 @@ setupAutocomplete(
 document.getElementById('find-route-button')!.addEventListener('click', findRoute);
 document.getElementById('skip-button')!.addEventListener('click', () => animCtrl.skip());
 document.getElementById('toggle-visited-button')!.addEventListener('click', toggleVisitedNodes);
+document.getElementById('map-style-select')!.addEventListener('change', (e) => {
+  mapCtrl.setTileLayer((e.target as HTMLSelectElement).value as MapStyle);
+});
 
 // ---------------------------------------------------------------------------
 // Page-level state

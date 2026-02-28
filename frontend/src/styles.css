@@ -80,8 +80,9 @@ body {
 
 #toggle-visited-button:hover { background: #4b5563; }
 
-/* Speed control — compact inline label+select */
-#speed-label {
+/* Speed and map-style controls — compact inline label+select */
+#speed-label,
+#map-style-label {
   flex: 0 0 auto;
   min-width: 0;
 }
