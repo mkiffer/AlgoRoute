@@ -49,14 +49,19 @@ func (pq *priorityQueue) Pop() any {
 	return entry
 }
 
-// Dijkstra returns the shortest path and its cost from start to goal.
+// Dijkstra returns the shortest path, its cost, and the list of settled nodes
+// from start to goal.
 func Dijkstra(
 	net *graph.Network,
 	start graph.NodeID,
 	goal graph.NodeID,
-) ([]graph.NodeID, float64, error) {
+) (RouteResult, error) {
 	if start == goal {
-		return []graph.NodeID{start}, 0, nil
+		return RouteResult{
+			Path:         []graph.NodeID{start},
+			Distance:     0,
+			VisitedNodes: []graph.NodeID{start},
+		}, nil
 	}
 
 	bestKnownCostTo := make(map[graph.NodeID]float64, len(net.Nodes))
@@ -69,6 +74,12 @@ func Dijkstra(
 	openSet := &priorityQueue{{node: start, cost: 0}}
 	heap.Init(openSet)
 
+	// visitedOrder records nodes in the order they are settled (finalized). A node
+	// is settled when it is popped from the heap and its stored cost matches the
+	// current best known cost — meaning no cheaper path to it will be found later.
+	// This ordering drives the traversal animation on the frontend.
+	var visitedOrder []graph.NodeID
+
 	for openSet.Len() > 0 {
 		currentEntry := heap.Pop(openSet).(*heapEntry)
 
@@ -78,6 +89,11 @@ func Dijkstra(
 		if currentEntry.cost > bestKnownCostTo[currentEntry.node] {
 			continue
 		}
+
+		// Record settlement before the early-exit so the goal appears in
+		// visitedOrder even though we break immediately after.
+		visitedOrder = append(visitedOrder, currentEntry.node)
+
 		if currentEntry.node == goal {
 			break
 		}
@@ -93,7 +109,7 @@ func Dijkstra(
 	}
 
 	if math.IsInf(bestKnownCostTo[goal], 1) {
-		return nil, 0, fmt.Errorf("dijkstra: no path from %v to %v", start, goal)
+		return RouteResult{}, fmt.Errorf("dijkstra: no path from %v to %v", start, goal)
 	}
 
 	// Reconstruct path by walking arrivedViaNode map backwards.
@@ -108,5 +124,9 @@ func Dijkstra(
 		path[i], path[j] = path[j], path[i]
 	}
 
-	return path, bestKnownCostTo[goal], nil
+	return RouteResult{
+		Path:         path,
+		Distance:     bestKnownCostTo[goal],
+		VisitedNodes: visitedOrder,
+	}, nil
 }

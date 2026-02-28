@@ -60,6 +60,26 @@
       cursor: not-allowed;
     }
 
+    #skip-button {
+      padding: 8px 16px;
+      background: #f97316;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      white-space: nowrap;
+      display: none; /* shown only during animation */
+    }
+
+    #skip-button:hover { background: #ea6b0e; }
+
+    /* Speed control — compact inline label+select */
+    #speed-label {
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+
     #status-message {
       font-size: 0.85rem;
       color: #666;
@@ -68,6 +88,29 @@
     }
 
     #status-message.error { color: #dc2626; }
+
+    /* Legend — shown below status when a route has been drawn */
+    #legend {
+      display: none;
+      gap: 16px;
+      font-size: 0.78rem;
+      color: #555;
+      width: 100%;
+      align-items: center;
+    }
+
+    #legend.visible { display: flex; }
+
+    .legend-swatch {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    .legend-item { display: flex; align-items: center; }
 
     #map { flex: 1; }
 
@@ -134,27 +177,83 @@
         <option value="astar">A*</option>
       </select>
     </label>
+    <label id="speed-label">
+      Speed
+      <select id="speed-select">
+        <option value="slow">Slow</option>
+        <option value="medium" selected>Medium</option>
+        <option value="fast">Fast</option>
+      </select>
+    </label>
     <button id="find-route-button">Find Route</button>
+    <button id="skip-button" title="Skip traversal animation and show route immediately">Skip</button>
     <div id="status-message"></div>
+    <div id="legend">
+      <span class="legend-item">
+        <span class="legend-swatch" id="legend-visited-swatch"></span>
+        <span id="legend-visited-label">Explored nodes</span>
+      </span>
+      <span class="legend-item">
+        <span class="legend-swatch" style="background:#2563eb;"></span>
+        Shortest path
+      </span>
+    </div>
   </div>
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
+    // ---------------------------------------------------------------------------
+    // Map initialisation
+    // ---------------------------------------------------------------------------
+
     const map = L.map('map').setView([-37.82, 144.97], 13);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    // routePolyline and markerGroup are replaced on each new route request
-    // so old overlays are removed before the new ones are drawn.
-    let routePolyline = null;
-    const markerGroup = L.layerGroup().addTo(map);
+    // Layer groups are replaced/cleared on each new route request.
+    let routePolyline   = null;
+    const markerGroup   = L.layerGroup().addTo(map);
+    const visitedGroup  = L.layerGroup().addTo(map);
+
+    // animationHandle is the ID returned by setInterval while a traversal
+    // animation is running. Null when no animation is active.
+    let animationHandle = null;
+
+    // pendingRouteData holds the full API response while the animation plays,
+    // so skipAnimation() can finalise the route without re-fetching.
+    let pendingRouteData = null;
+
+    // ---------------------------------------------------------------------------
+    // Animation speed configuration
+    // ---------------------------------------------------------------------------
+
+    // Each speed setting defines how many nodes are added per interval tick and
+    // how many milliseconds between ticks. Choosing larger batches at higher
+    // speeds keeps the interval callback lightweight even for large networks.
+    const SPEED_CONFIG = {
+      slow:   { batchSize:  1, intervalMs: 60 },
+      medium: { batchSize:  5, intervalMs: 20 },
+      fast:   { batchSize: 20, intervalMs:  8 },
+    };
+
+    // Algorithm colour palette for the traversal circles.
+    // Dijkstra uses blue (same family as the UI accent) to reinforce that it is
+    // the "default" algorithm. A* uses orange to highlight its directed nature.
+    const ALGORITHM_COLOUR = {
+      dijkstra: '#3b82f6',
+      astar:    '#f97316',
+    };
+
+    // ---------------------------------------------------------------------------
+    // Autocomplete
+    // ---------------------------------------------------------------------------
 
     // Set up autocomplete before attaching the find-route button listener so
-    // the autocomplete keydown handler fires first and can suppress form submission
-    // when the user presses Enter to select a suggestion.
+    // the autocomplete keydown handler fires first and can suppress form
+    // submission when the user presses Enter to select a suggestion.
     setupAutocomplete(
       document.getElementById('origin-input'),
       document.getElementById('origin-suggestions')
@@ -165,6 +264,7 @@
     );
 
     document.getElementById('find-route-button').addEventListener('click', findRoute);
+    document.getElementById('skip-button').addEventListener('click', skipAnimation);
 
     // Minimum characters before a suggestion fetch is triggered. Fewer than
     // two characters produce too many irrelevant results from Nominatim.
@@ -275,6 +375,10 @@
       }
     }
 
+    // ---------------------------------------------------------------------------
+    // Route request
+    // ---------------------------------------------------------------------------
+
     async function findRoute() {
       const originAddress      = document.getElementById('origin-input').value.trim();
       const destinationAddress = document.getElementById('destination-input').value.trim();
@@ -285,6 +389,11 @@
         showStatus('Please enter both an origin and a destination.', /*isError=*/true);
         return;
       }
+
+      // Cancel any running animation from a previous request before starting
+      // a new one so the map is always in a clean state.
+      cancelAnimation();
+      clearRoute();
 
       button.disabled = true;
       showStatus('Geocoding addresses and fetching road network\u2026');
@@ -307,7 +416,7 @@
           return;
         }
 
-        drawRoute(data, originAddress, destinationAddress);
+        startTraversalAnimation(data, originAddress, destinationAddress);
       } catch (networkError) {
         showStatus('Network error: ' + networkError.message, /*isError=*/true);
       } finally {
@@ -315,16 +424,121 @@
       }
     }
 
-    function drawRoute(routeData, originAddress, destinationAddress) {
-      // Remove the previous route overlay before drawing the new one.
+    // ---------------------------------------------------------------------------
+    // Traversal animation
+    // ---------------------------------------------------------------------------
+
+    // startTraversalAnimation kicks off the animated visualisation of the search
+    // traversal followed by the final path. It stores the full route data in
+    // pendingRouteData so skipAnimation() can finalise without re-rendering.
+    function startTraversalAnimation(routeData, originAddress, destinationAddress) {
+      pendingRouteData = { routeData, originAddress, destinationAddress };
+
+      const visited      = routeData.visited_nodes || [];
+      const pathLatLngs  = routeData.path.map(n => [n.lat, n.lon]);
+      const algorithm    = routeData.algorithm;
+      const colour       = ALGORITHM_COLOUR[algorithm] || '#3b82f6';
+
+      // Fit the map to the bounding box of all visited nodes so the full
+      // traversal is visible before the animation begins.
+      const allCoords = visited.map(n => [n.lat, n.lon]).concat(pathLatLngs);
+      if (allCoords.length > 0) {
+        map.fitBounds(L.latLngBounds(allCoords), { padding: [30, 30] });
+      }
+
+      updateLegend(algorithm, colour);
+      showSkipButton(true);
+
+      let nextIndex = 0;
+      const total   = visited.length;
+
+      const speed     = document.getElementById('speed-select').value;
+      const { batchSize, intervalMs } = SPEED_CONFIG[speed] || SPEED_CONFIG.medium;
+
+      showStatus('Exploring\u2026 (0\u00a0/\u00a0' + total.toLocaleString() + ' nodes settled)');
+
+      animationHandle = setInterval(() => {
+        // Add one batch of circle markers to the visited layer.
+        const end = Math.min(nextIndex + batchSize, total);
+        for (let i = nextIndex; i < end; i++) {
+          const node = visited[i];
+          L.circleMarker([node.lat, node.lon], {
+            radius:      3,
+            color:       'transparent',
+            fillColor:   colour,
+            fillOpacity: 0.35,
+          }).addTo(visitedGroup);
+        }
+        nextIndex = end;
+
+        showStatus(
+          'Exploring\u2026 (' + nextIndex.toLocaleString() + '\u00a0/\u00a0' +
+          total.toLocaleString() + ' nodes settled)'
+        );
+
+        if (nextIndex >= total) {
+          finishAnimation(routeData, originAddress, destinationAddress);
+        }
+      }, intervalMs);
+    }
+
+    // finishAnimation stops the interval, draws the final path polyline and
+    // markers, then resets animation state.
+    function finishAnimation(routeData, originAddress, destinationAddress) {
+      cancelAnimation();
+      drawPath(routeData, originAddress, destinationAddress);
+    }
+
+    // skipAnimation immediately flushes all remaining visited-node circles and
+    // draws the route, bypassing the timed animation loop.
+    function skipAnimation() {
+      if (!pendingRouteData) return;
+      cancelAnimation();
+
+      const { routeData, originAddress, destinationAddress } = pendingRouteData;
+      const visited = routeData.visited_nodes || [];
+      const colour  = ALGORITHM_COLOUR[routeData.algorithm] || '#3b82f6';
+
+      // Add all remaining circles instantly.
+      const existingCount = visitedGroup.getLayers().length;
+      for (let i = existingCount; i < visited.length; i++) {
+        const node = visited[i];
+        L.circleMarker([node.lat, node.lon], {
+          radius:      3,
+          color:       'transparent',
+          fillColor:   colour,
+          fillOpacity: 0.35,
+        }).addTo(visitedGroup);
+      }
+
+      drawPath(routeData, originAddress, destinationAddress);
+    }
+
+    // cancelAnimation stops the running setInterval without touching any map layers.
+    function cancelAnimation() {
+      if (animationHandle !== null) {
+        clearInterval(animationHandle);
+        animationHandle = null;
+      }
+      showSkipButton(false);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Route rendering (path + markers + status)
+    // ---------------------------------------------------------------------------
+
+    // drawPath renders the optimal path polyline, origin/destination markers,
+    // and the final status line. It is called both at the end of the animation
+    // and immediately by skipAnimation().
+    function drawPath(routeData, originAddress, destinationAddress) {
+      // Remove the previous path polyline before drawing the new one.
       if (routePolyline) {
         map.removeLayer(routePolyline);
       }
       markerGroup.clearLayers();
 
-      const pathLatLngs = routeData.path.map(node => [node.lat, node.lon]);
+      const pathLatLngs = routeData.path.map(n => [n.lat, n.lon]);
       routePolyline = L.polyline(pathLatLngs, { color: '#2563eb', weight: 4 }).addTo(map);
-      map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
 
       L.marker([routeData.origin_coord.lat, routeData.origin_coord.lon])
         .bindPopup('<strong>Origin</strong><br>' + originAddress)
@@ -334,17 +548,52 @@
         .bindPopup('<strong>Destination</strong><br>' + destinationAddress)
         .addTo(markerGroup);
 
-      const distanceKm = (routeData.distance_meters / 1000).toFixed(2);
+      const distanceKm   = (routeData.distance_meters / 1000).toFixed(2);
+      const exploredCount = (routeData.visited_nodes || []).length;
       showStatus(
         'Route found \u2014 ' + routeData.algorithm + ' \u2014 ' +
-        distanceKm + ' km \u2014 ' + routeData.path.length + ' nodes'
+        distanceKm + '\u00a0km \u2014 ' + routeData.path.length + ' nodes' +
+        ' (' + exploredCount.toLocaleString() + ' explored)'
       );
+
+      pendingRouteData = null;
+      showSkipButton(false);
     }
+
+    // clearRoute removes all route and visited-node overlays from the map and
+    // hides the legend. Called before starting a new route request.
+    function clearRoute() {
+      if (routePolyline) {
+        map.removeLayer(routePolyline);
+        routePolyline = null;
+      }
+      markerGroup.clearLayers();
+      visitedGroup.clearLayers();
+      document.getElementById('legend').classList.remove('visible');
+    }
+
+    // ---------------------------------------------------------------------------
+    // UI helpers
+    // ---------------------------------------------------------------------------
 
     function showStatus(message, isError = false) {
       const statusElement = document.getElementById('status-message');
       statusElement.textContent = message;
       statusElement.className = isError ? 'error' : '';
+    }
+
+    function showSkipButton(visible) {
+      document.getElementById('skip-button').style.display = visible ? '' : 'none';
+    }
+
+    // updateLegend sets the explored-nodes swatch colour and label to match
+    // the chosen algorithm, then makes the legend bar visible.
+    function updateLegend(algorithm, colour) {
+      const swatch = document.getElementById('legend-visited-swatch');
+      const label  = document.getElementById('legend-visited-label');
+      swatch.style.background = colour;
+      label.textContent = algorithm === 'astar' ? 'A* explored nodes' : 'Dijkstra explored nodes';
+      document.getElementById('legend').classList.add('visible');
     }
   </script>
 </body>

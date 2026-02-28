@@ -161,6 +161,70 @@ func nominatimSuggestStubHandler(results []map[string]string) http.HandlerFunc {
 	}
 }
 
+func TestHandleRoute_ValidRequest_ReturnsVisitedNodes(t *testing.T) {
+	// visited_nodes must be present and non-empty so the frontend can animate
+	// the traversal. Each entry must have lat and lon fields.
+	originStub := httptest.NewServer(nominatimStubHandler("-37.809", "144.959"))
+	defer originStub.Close()
+	destStub := httptest.NewServer(nominatimStubHandler("-37.831", "144.981"))
+	defer destStub.Close()
+	overpassStub := httptest.NewServer(overpassStubHandler(t))
+	defer overpassStub.Close()
+
+	srv := server.NewWithOptions(server.Options{
+		StaticDir:           ".",
+		GeocoderBaseURL:     originStub.URL,
+		DestGeocoderBaseURL: destStub.URL,
+		OverpassBaseURL:     overpassStub.URL,
+	})
+
+	body, _ := json.Marshal(map[string]string{
+		"origin":      "near node 1001",
+		"destination": "near node 1003",
+		"algorithm":   "dijkstra",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/route", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"POST /api/route: got status %d, want 200. Body: %s",
+			recorder.Code, recorder.Body.String(),
+		)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	visitedRaw, ok := response["visited_nodes"].([]interface{})
+	if !ok || len(visitedRaw) == 0 {
+		t.Fatalf(
+			"expected non-empty 'visited_nodes' array in response, got %v",
+			response["visited_nodes"],
+		)
+	}
+
+	// Every entry must carry lat and lon so the frontend can place circle markers.
+	for i, entry := range visitedRaw {
+		node, ok := entry.(map[string]interface{})
+		if !ok {
+			t.Errorf("visited_nodes[%d] is not an object: %v", i, entry)
+			continue
+		}
+		if _, hasLat := node["lat"]; !hasLat {
+			t.Errorf("visited_nodes[%d] missing 'lat' field", i)
+		}
+		if _, hasLon := node["lon"]; !hasLon {
+			t.Errorf("visited_nodes[%d] missing 'lon' field", i)
+		}
+	}
+}
+
 func TestHandleSuggest_EmptyQuery_Returns200WithEmptyJSONArray(t *testing.T) {
 	// A request with no ?q= parameter must return 200 with an empty JSON array,
 	// not a 400 or 500 — the frontend calls suggest on every keypress and an

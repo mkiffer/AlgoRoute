@@ -29,13 +29,14 @@ type AddressRouteRequest struct {
 }
 
 // AddressRouteResult is the result of an address-based routing operation.
-// Path carries full graph.Node values (NodeID + Coord) rather than bare
-// NodeIDs so the HTTP layer can render the route on a map without an
-// additional coordinate lookup.
+// Path and VisitedNodes carry full graph.Node values (NodeID + Coord) rather
+// than bare NodeIDs so the HTTP layer can render overlays without a separate
+// coordinate lookup.
 type AddressRouteResult struct {
 	Algorithm        string
 	DistanceMeters   float64
 	Path             []graph.Node // ordered nodes from origin snap to destination snap
-	OriginCoord      geo.Coord   // the geocoded origin coordinate (not the snapped node)
-	DestinationCoord geo.Coord   // the geocoded destination coordinate (not the snapped node)
+	VisitedNodes     []graph.Node // settled nodes in expansion order, for traversal animation
+	OriginCoord      geo.Coord    // the geocoded origin coordinate (not the snapped node)
+	DestinationCoord geo.Coord    // the geocoded destination coordinate (not the snapped node)
 }

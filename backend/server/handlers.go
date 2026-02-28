@@ -21,6 +21,7 @@ type routeResponse struct {
 	Algorithm        string      `json:"algorithm"`
 	DistanceMeters   float64     `json:"distance_meters"`
 	Path             []pathNode  `json:"path"`
+	VisitedNodes     []coordJSON `json:"visited_nodes"`
 	OriginCoord      coordJSON   `json:"origin_coord"`
 	DestinationCoord coordJSON   `json:"destination_coord"`
 }
@@ -98,10 +99,16 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	visitedNodes := make([]coordJSON, len(result.VisitedNodes))
+	for i, node := range result.VisitedNodes {
+		visitedNodes[i] = coordJSON{Lat: node.Coord.Lat, Lon: node.Coord.Lon}
+	}
+
 	writeJSON(w, http.StatusOK, routeResponse{
 		Algorithm:      result.Algorithm,
 		DistanceMeters: result.DistanceMeters,
 		Path:           pathNodes,
+		VisitedNodes:   visitedNodes,
 		OriginCoord:    coordJSON{Lat: result.OriginCoord.Lat, Lon: result.OriginCoord.Lon},
 		DestinationCoord: coordJSON{
 			Lat: result.DestinationCoord.Lat,

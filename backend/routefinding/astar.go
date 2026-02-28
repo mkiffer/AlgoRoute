@@ -9,11 +9,15 @@ import (
 	"algoroute/graph"
 )
 
-// AStar returns the shortest path and its cost from start to goal using the
-// A* algorithm with Haversine distance as the heuristic.
-func AStar(net *graph.Network, start, goal graph.NodeID) ([]graph.NodeID, float64, error) {
+// AStar returns the shortest path, its cost, and the list of settled nodes
+// from start to goal using the A* algorithm with Haversine distance as the heuristic.
+func AStar(net *graph.Network, start, goal graph.NodeID) (RouteResult, error) {
 	if start == goal {
-		return []graph.NodeID{start}, 0, nil
+		return RouteResult{
+			Path:         []graph.NodeID{start},
+			Distance:     0,
+			VisitedNodes: []graph.NodeID{start},
+		}, nil
 	}
 
 	goalCoord := net.Nodes[goal].Coord
@@ -31,6 +35,11 @@ func AStar(net *graph.Network, start, goal graph.NodeID) ([]graph.NodeID, float6
 	openSet := &priorityQueue{{node: start, cost: estimateCostToGoal(start)}}
 	heap.Init(openSet)
 
+	// visitedOrder records nodes in the order they are settled — same semantics as
+	// Dijkstra, but A*'s heuristic causes the frontier to expand toward the goal
+	// rather than radially, so this slice will typically be shorter than Dijkstra's.
+	var visitedOrder []graph.NodeID
+
 	for openSet.Len() > 0 {
 		currentEntry := heap.Pop(openSet).(*heapEntry)
 
@@ -43,6 +52,11 @@ func AStar(net *graph.Network, start, goal graph.NodeID) ([]graph.NodeID, float6
 		if currentEntry.cost > bestKnownCostTo[currentEntry.node]+estimateCostToGoal(currentEntry.node) {
 			continue
 		}
+
+		// Record settlement before the early-exit so the goal appears in
+		// visitedOrder even though we break immediately after.
+		visitedOrder = append(visitedOrder, currentEntry.node)
+
 		if currentEntry.node == goal {
 			break
 		}
@@ -58,7 +72,7 @@ func AStar(net *graph.Network, start, goal graph.NodeID) ([]graph.NodeID, float6
 	}
 
 	if math.IsInf(bestKnownCostTo[goal], 1) {
-		return nil, 0, fmt.Errorf("astar: no path from %v to %v", start, goal)
+		return RouteResult{}, fmt.Errorf("astar: no path from %v to %v", start, goal)
 	}
 
 	// Reconstruct path by walking arrivedViaNode map backwards.
@@ -73,5 +87,9 @@ func AStar(net *graph.Network, start, goal graph.NodeID) ([]graph.NodeID, float6
 		path[i], path[j] = path[j], path[i]
 	}
 
-	return path, bestKnownCostTo[goal], nil
+	return RouteResult{
+		Path:         path,
+		Distance:     bestKnownCostTo[goal],
+		VisitedNodes: visitedOrder,
+	}, nil
 }

@@ -77,22 +77,29 @@ func (s *RoutingService) RouteByAddress(req AddressRouteRequest) (AddressRouteRe
 	}
 
 	// Step 6: Run the routing algorithm.
-	pathNodeIDs, totalDistance, err := s.router.Route(network, startNodeID, goalNodeID)
+	routeResult, err := s.router.Route(network, startNodeID, goalNodeID)
 	if err != nil {
 		return AddressRouteResult{}, fmt.Errorf("route: %w", err)
 	}
 
 	// Step 7: Enrich path with coordinates so the HTTP layer can render a
 	// polyline without a separate node-coordinate lookup.
-	pathNodes := make([]graph.Node, len(pathNodeIDs))
-	for i, nodeID := range pathNodeIDs {
+	pathNodes := make([]graph.Node, len(routeResult.Path))
+	for i, nodeID := range routeResult.Path {
 		pathNodes[i] = network.Nodes[nodeID]
+	}
+
+	// Step 7b: Enrich visited nodes with coordinates for the traversal animation.
+	visitedNodes := make([]graph.Node, len(routeResult.VisitedNodes))
+	for i, nodeID := range routeResult.VisitedNodes {
+		visitedNodes[i] = network.Nodes[nodeID]
 	}
 
 	return AddressRouteResult{
 		Algorithm:        s.algorithm,
-		DistanceMeters:   totalDistance,
+		DistanceMeters:   routeResult.Distance,
 		Path:             pathNodes,
+		VisitedNodes:     visitedNodes,
 		OriginCoord:      originCoord,
 		DestinationCoord: destinationCoord,
 	}, nil

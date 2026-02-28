@@ -50,6 +50,13 @@ Layered design — each layer depends only on layers below it:
 5. **`routefinding`** — path-finding algorithms operating on `graph.Network`
 6. **`services`** — orchestrates the full pipeline (load network, find route, return results)
 
+## Development Practices
+
+All new code must follow these skills — apply them without being asked:
+
+- **Clean Code** (`clean-code` skill): descriptive naming, self-documenting structure, explained design decisions.
+- **Test-Driven Development** (`test-driven-development` skill): write a failing test first, then implement the minimum code to pass, then refactor. Never write implementation before a test.
+
 ## Conventions
 - Test packages use `_test` suffix (e.g., `package overpass_test`)
 - External test packages live in a `tests/` subdirectory (e.g., `geo/tests/`, `services/tests/`)
@@ -58,19 +65,6 @@ Layered design — each layer depends only on layers below it:
 - Maps for O(1) lookups; adjacency list for graph traversal
 - All source files formatted with `gofmt`
 
-## Current State
+## Project State
 
-| Component | Status |
-|-----------|--------|
-| Graph core (`graph/`) | Complete — 2 passing tests |
-| OSM API client (`api/overpass/`) | Complete — 1 passing test |
-| Data mapping (`mapping/`) | Complete — 1 passing test |
-| Geo utilities (`geo/`) | Complete — 6 passing tests |
-| Dijkstra algorithm (`routefinding/dijkstra.go`) | Complete — 5 passing tests |
-| A* algorithm (`routefinding/astar.go`) | Complete — 5 passing tests |
-| Router interface (`routefinding/router.go`) | Complete — `DijkstraRouter` and `AStarRouter` wrappers |
-| Service layer (`services/`) | Complete — 8 passing tests |
-| `main.go` | Complete — flag-based CLI (`-data`, `-start`, `-end`, `-algo`) |
-| Frontend | Empty |
-
-All 28 tests pass across 6 packages (`go test ./...`).
+Current component status and test counts are tracked in [`PROJECT_STATE.md`](PROJECT_STATE.md).

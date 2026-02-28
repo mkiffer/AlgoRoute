@@ -34,14 +34,14 @@ func (s *RoutingService) Route(req RouteRequest) (RouteResult, error) {
 		return RouteResult{}, err
 	}
 
-	path, dist, err := s.router.Route(net, req.StartNode, req.GoalNode)
+	routeResult, err := s.router.Route(net, req.StartNode, req.GoalNode)
 	if err != nil {
 		return RouteResult{}, fmt.Errorf("route: %w", err)
 	}
 
 	return RouteResult{
-		Path:      path,
-		Distance:  dist,
+		Path:      routeResult.Path,
+		Distance:  routeResult.Distance,
 		Algorithm: s.algorithm,
 	}, nil
 }

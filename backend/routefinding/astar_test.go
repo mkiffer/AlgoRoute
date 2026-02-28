@@ -24,15 +24,15 @@ func TestAStar_FindsShortestPath_UniqueBest(t *testing.T) {
 	mustAddEdge(t, net, edgeSpec{from: 4, to: 5, weight: 2})
 	mustAddEdge(t, net, edgeSpec{from: 5, to: 3, weight: 2})
 
-	path, dist, err := AStar(net, graph.NodeID(1), graph.NodeID(3))
+	result, err := AStar(net, graph.NodeID(1), graph.NodeID(3))
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
 
-	assertPathEquals(t, path, []graph.NodeID{1, 2, 3})
+	assertPathEquals(t, result.Path, []graph.NodeID{1, 2, 3})
 
-	if dist != 2 {
-		t.Fatalf("distance: got %v want %v", dist, 2.0)
+	if result.Distance != 2 {
+		t.Fatalf("distance: got %v want %v", result.Distance, 2.0)
 	}
 }
 
@@ -45,9 +45,9 @@ func TestAStar_Unreachable_ReturnsError(t *testing.T) {
 	// Only 1 -> 2 exists. Node 3 is disconnected.
 	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: 1})
 
-	path, dist, err := AStar(net, graph.NodeID(1), graph.NodeID(3))
+	result, err := AStar(net, graph.NodeID(1), graph.NodeID(3))
 	if err == nil {
-		t.Fatalf("expected error for unreachable target, got nil (path=%v dist=%v)", path, dist)
+		t.Fatalf("expected error for unreachable target, got nil (path=%v)", result.Path)
 	}
 }
 
@@ -55,15 +55,15 @@ func TestAStar_StartEqualsGoal_ReturnsTrivialPath(t *testing.T) {
 	net := graph.NewNetwork()
 	mustAddNode(t, net, 1)
 
-	path, dist, err := AStar(net, graph.NodeID(1), graph.NodeID(1))
+	result, err := AStar(net, graph.NodeID(1), graph.NodeID(1))
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
 
-	assertPathEquals(t, path, []graph.NodeID{1})
+	assertPathEquals(t, result.Path, []graph.NodeID{1})
 
-	if dist != 0 {
-		t.Fatalf("distance: got %v want %v", dist, 0.0)
+	if result.Distance != 0 {
+		t.Fatalf("distance: got %v want %v", result.Distance, 0.0)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestAStar_RespectsDirection_DirectedGraph(t *testing.T) {
 	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: 1})
 
 	// Route 2 -> 1 should be unreachable
-	_, _, err := AStar(net, graph.NodeID(2), graph.NodeID(1))
+	_, err := AStar(net, graph.NodeID(2), graph.NodeID(1))
 	if err == nil {
 		t.Fatalf("expected error for unreachable route in directed graph, got nil")
 	}
@@ -113,10 +113,116 @@ func TestAStar_WithRealCoords_AdmissibleHeuristic(t *testing.T) {
 	mustAddEdge(t, net, edgeSpec{from: 2, to: 3, weight: d23})
 	mustAddEdge(t, net, edgeSpec{from: 1, to: 3, weight: d13penalty})
 
-	path, _, err := AStar(net, graph.NodeID(1), graph.NodeID(3))
+	result, err := AStar(net, graph.NodeID(1), graph.NodeID(3))
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
 
-	assertPathEquals(t, path, []graph.NodeID{1, 2, 3})
+	assertPathEquals(t, result.Path, []graph.NodeID{1, 2, 3})
+}
+
+// --- visited-nodes tests ---
+
+func TestAStar_VisitedNodes_StartsAtStart(t *testing.T) {
+	// The first settled node must always be the start — same reasoning as Dijkstra.
+	net := graph.NewNetwork()
+	for _, id := range []int64{1, 2, 3} {
+		mustAddNode(t, net, id)
+	}
+	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: 1})
+	mustAddEdge(t, net, edgeSpec{from: 2, to: 3, weight: 1})
+
+	result, err := AStar(net, graph.NodeID(1), graph.NodeID(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.VisitedNodes) == 0 {
+		t.Fatal("VisitedNodes must not be empty")
+	}
+	if result.VisitedNodes[0] != graph.NodeID(1) {
+		t.Errorf("VisitedNodes[0]: got %v want 1", result.VisitedNodes[0])
+	}
+}
+
+func TestAStar_VisitedNodes_ContainsGoal(t *testing.T) {
+	net := graph.NewNetwork()
+	for _, id := range []int64{1, 2, 3} {
+		mustAddNode(t, net, id)
+	}
+	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: 1})
+	mustAddEdge(t, net, edgeSpec{from: 2, to: 3, weight: 1})
+
+	result, err := AStar(net, graph.NodeID(1), graph.NodeID(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsNode(result.VisitedNodes, graph.NodeID(3)) {
+		t.Errorf("VisitedNodes does not contain goal node 3: %v", result.VisitedNodes)
+	}
+}
+
+func TestAStar_StartEqualsGoal_VisitedNodesIsStart(t *testing.T) {
+	net := graph.NewNetwork()
+	mustAddNode(t, net, 1)
+
+	result, err := AStar(net, graph.NodeID(1), graph.NodeID(1))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.VisitedNodes) != 1 || result.VisitedNodes[0] != graph.NodeID(1) {
+		t.Errorf("VisitedNodes for trivial path: got %v want [1]", result.VisitedNodes)
+	}
+}
+
+func TestAStar_VisitsFewerOrEqualNodesThanDijkstra(t *testing.T) {
+	// On a graph with real Haversine-distance weights and coordinates pointing
+	// toward the goal, A*'s heuristic biases expansion toward the goal and
+	// should settle no more nodes than Dijkstra on the same query.
+	//
+	// Layout: five nodes in a straight east line. Dijkstra must explore all
+	// branches; A*'s heuristic steers it directly along the correct axis.
+	//
+	//   1(0,0) -> 2(0,0.25) -> 3(0,0.5) -> 4(0,0.75) -> 5(0,1.0)
+	//   Also: 1 -> detour (0,0.25 offset north) -> 5 (expensive penalty)
+	net := graph.NewNetwork()
+
+	c1 := geo.Coord{Lat: 0.0, Lon: 0.00}
+	c2 := geo.Coord{Lat: 0.0, Lon: 0.25}
+	c3 := geo.Coord{Lat: 0.0, Lon: 0.50}
+	c4 := geo.Coord{Lat: 0.0, Lon: 0.75}
+	c5 := geo.Coord{Lat: 0.0, Lon: 1.00}
+	cD := geo.Coord{Lat: 1.0, Lon: 0.50} // detour node far north
+
+	for id, coord := range map[int64]geo.Coord{1: c1, 2: c2, 3: c3, 4: c4, 5: c5, 6: cD} {
+		net.AddNode(graph.Node{ID: graph.NodeID(id), Coord: coord})
+	}
+
+	// Cheap path: 1->2->3->4->5
+	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: geo.DistanceMeters(c1, c2)})
+	mustAddEdge(t, net, edgeSpec{from: 2, to: 3, weight: geo.DistanceMeters(c2, c3)})
+	mustAddEdge(t, net, edgeSpec{from: 3, to: 4, weight: geo.DistanceMeters(c3, c4)})
+	mustAddEdge(t, net, edgeSpec{from: 4, to: 5, weight: geo.DistanceMeters(c4, c5)})
+	// Expensive detour: 1->6->5 (penalised weight so it's never optimal)
+	mustAddEdge(t, net, edgeSpec{from: 1, to: 6, weight: geo.DistanceMeters(c1, cD) * 10})
+	mustAddEdge(t, net, edgeSpec{from: 6, to: 5, weight: geo.DistanceMeters(cD, c5) * 10})
+
+	dijkResult, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(5))
+	if err != nil {
+		t.Fatalf("Dijkstra error: %v", err)
+	}
+	astarResult, err := AStar(net, graph.NodeID(1), graph.NodeID(5))
+	if err != nil {
+		t.Fatalf("A* error: %v", err)
+	}
+
+	// Both algorithms must find the same optimal path.
+	assertPathEquals(t, astarResult.Path, dijkResult.Path)
+
+	// A* must settle no more nodes than Dijkstra.
+	if len(astarResult.VisitedNodes) > len(dijkResult.VisitedNodes) {
+		t.Errorf(
+			"A* settled %d nodes vs Dijkstra's %d — A* should never visit more nodes on admissible heuristic",
+			len(astarResult.VisitedNodes), len(dijkResult.VisitedNodes),
+		)
+	}
 }

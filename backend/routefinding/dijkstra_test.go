@@ -46,7 +46,17 @@ func assertPathEquals(t *testing.T, got []graph.NodeID, want []graph.NodeID) {
 	}
 }
 
-// --- tests ---
+// containsNode reports whether nodeID appears anywhere in nodes.
+func containsNode(nodes []graph.NodeID, nodeID graph.NodeID) bool {
+	for _, n := range nodes {
+		if n == nodeID {
+			return true
+		}
+	}
+	return false
+}
+
+// --- path tests ---
 
 func TestDijkstra_FindsShortestPath_UniqueBest(t *testing.T) {
 	net := graph.NewNetwork()
@@ -64,15 +74,16 @@ func TestDijkstra_FindsShortestPath_UniqueBest(t *testing.T) {
 	mustAddEdge(t, net, edgeSpec{from: 1, to: 4, weight: 2})
 	mustAddEdge(t, net, edgeSpec{from: 4, to: 5, weight: 2})
 	mustAddEdge(t, net, edgeSpec{from: 5, to: 3, weight: 2})
-	path, dist, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(3))
+
+	result, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(3))
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
 
-	assertPathEquals(t, path, []graph.NodeID{1, 2, 3})
+	assertPathEquals(t, result.Path, []graph.NodeID{1, 2, 3})
 
-	if dist != 2 {
-		t.Fatalf("distance: got %v want %v", dist, 2.0)
+	if result.Distance != 2 {
+		t.Fatalf("distance: got %v want %v", result.Distance, 2.0)
 	}
 }
 
@@ -85,9 +96,9 @@ func TestDijkstra_Unreachable_ReturnsError(t *testing.T) {
 	// Only 1 -> 2 exists. Node 3 is disconnected.
 	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: 1})
 
-	path, dist, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(3))
+	result, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(3))
 	if err == nil {
-		t.Fatalf("expected error for unreachable target, got nil (path=%v dist=%v)", path, dist)
+		t.Fatalf("expected error for unreachable target, got nil (path=%v)", result.Path)
 	}
 }
 
@@ -95,17 +106,17 @@ func TestDijkstra_StartEqualsGoal_ReturnsTrivialPath(t *testing.T) {
 	net := graph.NewNetwork()
 	mustAddNode(t, net, 1)
 
-	path, dist, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(1))
+	result, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(1))
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
 
 	// Expected behavior for a clean implementation:
 	// path is [start], distance is 0.
-	assertPathEquals(t, path, []graph.NodeID{1})
+	assertPathEquals(t, result.Path, []graph.NodeID{1})
 
-	if dist != 0 {
-		t.Fatalf("distance: got %v want %v", dist, 0.0)
+	if result.Distance != 0 {
+		t.Fatalf("distance: got %v want %v", result.Distance, 0.0)
 	}
 }
 
@@ -119,7 +130,7 @@ func TestDijkstra_RespectsDirection_DirectedGraph(t *testing.T) {
 	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: 1})
 
 	// Route 2 -> 1 should be unreachable
-	_, _, err := Dijkstra(net, graph.NodeID(2), graph.NodeID(1))
+	_, err := Dijkstra(net, graph.NodeID(2), graph.NodeID(1))
 	if err == nil {
 		t.Fatalf("expected error for unreachable route in directed graph, got nil")
 	}
@@ -139,14 +150,95 @@ func TestDijkstra_ChoosesCheapestAmongManyOutgoing(t *testing.T) {
 	mustAddEdge(t, net, edgeSpec{from: 3, to: 4, weight: 1})
 	mustAddEdge(t, net, edgeSpec{from: 2, to: 4, weight: 1})
 
-	path, dist, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(4))
+	result, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(4))
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
 
-	assertPathEquals(t, path, []graph.NodeID{1, 3, 4})
+	assertPathEquals(t, result.Path, []graph.NodeID{1, 3, 4})
 
-	if dist != 2 {
-		t.Fatalf("distance: got %v want %v", dist, 2.0)
+	if result.Distance != 2 {
+		t.Fatalf("distance: got %v want %v", result.Distance, 2.0)
+	}
+}
+
+// --- visited-nodes tests ---
+
+func TestDijkstra_VisitedNodes_StartsAtStart(t *testing.T) {
+	// The first settled node must always be the start — it is pushed with cost 0
+	// and no cheaper path to it can exist.
+	net := graph.NewNetwork()
+	for _, id := range []int64{1, 2, 3} {
+		mustAddNode(t, net, id)
+	}
+	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: 1})
+	mustAddEdge(t, net, edgeSpec{from: 2, to: 3, weight: 1})
+
+	result, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.VisitedNodes) == 0 {
+		t.Fatal("VisitedNodes must not be empty")
+	}
+	if result.VisitedNodes[0] != graph.NodeID(1) {
+		t.Errorf("VisitedNodes[0]: got %v want 1", result.VisitedNodes[0])
+	}
+}
+
+func TestDijkstra_VisitedNodes_ContainsGoal(t *testing.T) {
+	// The goal node must appear in VisitedNodes — the algorithm terminates when
+	// it is settled, so it must have been recorded.
+	net := graph.NewNetwork()
+	for _, id := range []int64{1, 2, 3} {
+		mustAddNode(t, net, id)
+	}
+	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: 1})
+	mustAddEdge(t, net, edgeSpec{from: 2, to: 3, weight: 1})
+
+	result, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsNode(result.VisitedNodes, graph.NodeID(3)) {
+		t.Errorf("VisitedNodes does not contain goal node 3: %v", result.VisitedNodes)
+	}
+}
+
+func TestDijkstra_VisitedNodes_ContainsAllPathNodes(t *testing.T) {
+	// Every node on the optimal path must have been settled — the path is built
+	// from the arrivedVia map, which is only populated when a node is relaxed
+	// after being settled by its predecessor.
+	net := graph.NewNetwork()
+	for _, id := range []int64{1, 2, 3, 4, 5} {
+		mustAddNode(t, net, id)
+	}
+	mustAddEdge(t, net, edgeSpec{from: 1, to: 2, weight: 1})
+	mustAddEdge(t, net, edgeSpec{from: 2, to: 3, weight: 1})
+	mustAddEdge(t, net, edgeSpec{from: 1, to: 4, weight: 10})
+	mustAddEdge(t, net, edgeSpec{from: 4, to: 5, weight: 10})
+
+	result, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, pathNode := range result.Path {
+		if !containsNode(result.VisitedNodes, pathNode) {
+			t.Errorf("path node %v missing from VisitedNodes: %v", pathNode, result.VisitedNodes)
+		}
+	}
+}
+
+func TestDijkstra_StartEqualsGoal_VisitedNodesIsStart(t *testing.T) {
+	// Trivial path: only the start/goal node should appear as visited.
+	net := graph.NewNetwork()
+	mustAddNode(t, net, 1)
+
+	result, err := Dijkstra(net, graph.NodeID(1), graph.NodeID(1))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.VisitedNodes) != 1 || result.VisitedNodes[0] != graph.NodeID(1) {
+		t.Errorf("VisitedNodes for trivial path: got %v want [1]", result.VisitedNodes)
 	}
 }
