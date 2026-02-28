@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"algoroute/geo"
@@ -47,10 +48,19 @@ type errorResponse struct {
 func writeJSON(w http.ResponseWriter, statusCode int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(body)
+	// The header and status are already flushed; if Encode fails we can only log.
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		log.Printf("writeJSON: encode response: %v", err)
+	}
 }
 
+// maxRequestBodyBytes caps how much of a request body is read before the
+// handler rejects the request. Prevents memory exhaustion from oversized payloads.
+const maxRequestBodyBytes = 1 << 20 // 1 MB
+
 func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+
 	var req routeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{

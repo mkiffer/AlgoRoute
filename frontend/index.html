@@ -74,6 +74,20 @@
 
     #skip-button:hover { background: #ea6b0e; }
 
+    #toggle-visited-button {
+      padding: 8px 16px;
+      background: #6b7280;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      white-space: nowrap;
+      display: none; /* shown only after a route is drawn */
+    }
+
+    #toggle-visited-button:hover { background: #4b5563; }
+
     /* Speed control — compact inline label+select */
     #speed-label {
       flex: 0 0 auto;
@@ -186,7 +200,8 @@
       </select>
     </label>
     <button id="find-route-button">Find Route</button>
-    <button id="skip-button" title="Skip traversal animation and show route immediately">Skip</button>
+    <button id="skip-button" title="Skip to final route immediately">Skip</button>
+    <button id="toggle-visited-button">Show explored nodes</button>
     <div id="status-message"></div>
     <div id="legend">
       <span class="legend-item">
@@ -214,17 +229,25 @@
     }).addTo(map);
 
     // Layer groups are replaced/cleared on each new route request.
-    let routePolyline   = null;
-    const markerGroup   = L.layerGroup().addTo(map);
-    const visitedGroup  = L.layerGroup().addTo(map);
+    let routePolyline  = null;
+    const markerGroup  = L.layerGroup().addTo(map);
+    const visitedGroup = L.layerGroup().addTo(map);
 
-    // animationHandle is the ID returned by setInterval while a traversal
-    // animation is running. Null when no animation is active.
-    let animationHandle = null;
+    // traversalAnimationHandle: setInterval ID while explored-node dots are animating.
+    // pathAnimationHandle: setInterval ID while the route polyline is growing.
+    // Both are null when no animation is active.
+    let traversalAnimationHandle = null;
+    let pathAnimationHandle      = null;
 
-    // pendingRouteData holds the full API response while the animation plays,
-    // so skipAnimation() can finalise the route without re-fetching.
+    // pendingRouteData holds the full API response while animations play, so
+    // skipAnimation() can finalise the route without re-fetching.
     let pendingRouteData = null;
+
+    // Explored-node state preserved after the traversal animation clears the dots,
+    // so the toggle button can re-render or re-hide them on demand.
+    let lastVisitedNodes    = [];
+    let lastAlgorithmColour = '#3b82f6';
+    let visitedNodesVisible = false;
 
     // ---------------------------------------------------------------------------
     // Animation speed configuration
@@ -247,6 +270,11 @@
       astar:    '#f97316',
     };
 
+    // Milliseconds between each node added during the path-drawing animation.
+    // The path is typically short relative to explored nodes, so a fixed rate
+    // gives a smooth, visible draw without being sluggish.
+    const PATH_ANIMATION_INTERVAL_MS = 0.5;
+
     // ---------------------------------------------------------------------------
     // Autocomplete
     // ---------------------------------------------------------------------------
@@ -265,6 +293,7 @@
 
     document.getElementById('find-route-button').addEventListener('click', findRoute);
     document.getElementById('skip-button').addEventListener('click', skipAnimation);
+    document.getElementById('toggle-visited-button').addEventListener('click', toggleVisitedNodes);
 
     // Minimum characters before a suggestion fetch is triggered. Fewer than
     // two characters produce too many irrelevant results from Nominatim.
@@ -392,7 +421,7 @@
 
       // Cancel any running animation from a previous request before starting
       // a new one so the map is always in a clean state.
-      cancelAnimation();
+      cancelAllAnimations();
       clearRoute();
 
       button.disabled = true;
@@ -425,19 +454,19 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Traversal animation
+    // Traversal animation — phase 1: explore dots
     // ---------------------------------------------------------------------------
 
     // startTraversalAnimation kicks off the animated visualisation of the search
-    // traversal followed by the final path. It stores the full route data in
-    // pendingRouteData so skipAnimation() can finalise without re-rendering.
+    // traversal. When all explored nodes have been shown the dots are cleared and
+    // startPathAnimation() takes over for phase 2.
     function startTraversalAnimation(routeData, originAddress, destinationAddress) {
       pendingRouteData = { routeData, originAddress, destinationAddress };
 
-      const visited      = routeData.visited_nodes || [];
-      const pathLatLngs  = routeData.path.map(n => [n.lat, n.lon]);
-      const algorithm    = routeData.algorithm;
-      const colour       = ALGORITHM_COLOUR[algorithm] || '#3b82f6';
+      const visited     = routeData.visited_nodes || [];
+      const pathLatLngs = routeData.path.map(n => [n.lat, n.lon]);
+      const algorithm   = routeData.algorithm;
+      const colour      = ALGORITHM_COLOUR[algorithm] || '#3b82f6';
 
       // Fit the map to the bounding box of all visited nodes so the full
       // traversal is visible before the animation begins.
@@ -449,6 +478,12 @@
       updateLegend(algorithm, colour);
       showSkipButton(true);
 
+      // Skip directly to phase 2 if there are no explored nodes to animate.
+      if (visited.length === 0) {
+        startPathAnimation(routeData, originAddress, destinationAddress);
+        return;
+      }
+
       let nextIndex = 0;
       const total   = visited.length;
 
@@ -457,7 +492,7 @@
 
       showStatus('Exploring\u2026 (0\u00a0/\u00a0' + total.toLocaleString() + ' nodes settled)');
 
-      animationHandle = setInterval(() => {
+      traversalAnimationHandle = setInterval(() => {
         // Add one batch of circle markers to the visited layer.
         const end = Math.min(nextIndex + batchSize, total);
         for (let i = nextIndex; i < end; i++) {
@@ -477,68 +512,93 @@
         );
 
         if (nextIndex >= total) {
-          finishAnimation(routeData, originAddress, destinationAddress);
+          clearInterval(traversalAnimationHandle);
+          traversalAnimationHandle = null;
+          // Dots disappear — phase 2 (path drawing) takes over.
+          visitedGroup.clearLayers();
+          startPathAnimation(routeData, originAddress, destinationAddress);
         }
       }, intervalMs);
     }
 
-    // finishAnimation stops the interval, draws the final path polyline and
-    // markers, then resets animation state.
-    function finishAnimation(routeData, originAddress, destinationAddress) {
-      cancelAnimation();
-      drawPath(routeData, originAddress, destinationAddress);
+    // ---------------------------------------------------------------------------
+    // Path animation — phase 2: draw the route
+    // ---------------------------------------------------------------------------
+
+    // startPathAnimation grows the route polyline one node at a time so the
+    // chosen path is revealed from origin to destination.
+    function startPathAnimation(routeData, originAddress, destinationAddress) {
+      const pathLatLngs = routeData.path.map(n => [n.lat, n.lon]);
+
+      if (routePolyline) {
+        map.removeLayer(routePolyline);
+      }
+      // Start with an empty polyline; addLatLng() extends it each tick.
+      routePolyline = L.polyline([], { color: '#2563eb', weight: 4 }).addTo(map);
+
+      showStatus('Drawing route\u2026');
+
+      let i = 0;
+      pathAnimationHandle = setInterval(() => {
+        if (i >= pathLatLngs.length) {
+          clearInterval(pathAnimationHandle);
+          pathAnimationHandle = null;
+          finalizeRoute(routeData, originAddress, destinationAddress);
+          return;
+        }
+        routePolyline.addLatLng(pathLatLngs[i]);
+        i++;
+      }, PATH_ANIMATION_INTERVAL_MS);
     }
 
-    // skipAnimation immediately flushes all remaining visited-node circles and
-    // draws the route, bypassing the timed animation loop.
+    // skipAnimation cancels both animation phases and immediately draws the
+    // complete route, bypassing all animation.
     function skipAnimation() {
       if (!pendingRouteData) return;
-      cancelAnimation();
 
       const { routeData, originAddress, destinationAddress } = pendingRouteData;
-      const visited = routeData.visited_nodes || [];
-      const colour  = ALGORITHM_COLOUR[routeData.algorithm] || '#3b82f6';
 
-      // Add all remaining circles instantly.
-      const existingCount = visitedGroup.getLayers().length;
-      for (let i = existingCount; i < visited.length; i++) {
-        const node = visited[i];
-        L.circleMarker([node.lat, node.lon], {
-          radius:      3,
-          color:       'transparent',
-          fillColor:   colour,
-          fillOpacity: 0.35,
-        }).addTo(visitedGroup);
+      cancelAllAnimations();
+      visitedGroup.clearLayers();
+
+      // Draw the full path polyline instantly.
+      if (routePolyline) {
+        map.removeLayer(routePolyline);
       }
+      const pathLatLngs = routeData.path.map(n => [n.lat, n.lon]);
+      routePolyline = L.polyline(pathLatLngs, { color: '#2563eb', weight: 4 }).addTo(map);
 
-      drawPath(routeData, originAddress, destinationAddress);
+      finalizeRoute(routeData, originAddress, destinationAddress);
     }
 
-    // cancelAnimation stops the running setInterval without touching any map layers.
-    function cancelAnimation() {
-      if (animationHandle !== null) {
-        clearInterval(animationHandle);
-        animationHandle = null;
+    // cancelAllAnimations stops any running traversal or path interval without
+    // touching map layers, and hides the skip button.
+    function cancelAllAnimations() {
+      if (traversalAnimationHandle !== null) {
+        clearInterval(traversalAnimationHandle);
+        traversalAnimationHandle = null;
+      }
+      if (pathAnimationHandle !== null) {
+        clearInterval(pathAnimationHandle);
+        pathAnimationHandle = null;
       }
       showSkipButton(false);
     }
 
     // ---------------------------------------------------------------------------
-    // Route rendering (path + markers + status)
+    // Route finalisation
     // ---------------------------------------------------------------------------
 
-    // drawPath renders the optimal path polyline, origin/destination markers,
-    // and the final status line. It is called both at the end of the animation
-    // and immediately by skipAnimation().
-    function drawPath(routeData, originAddress, destinationAddress) {
-      // Remove the previous path polyline before drawing the new one.
-      if (routePolyline) {
-        map.removeLayer(routePolyline);
-      }
-      markerGroup.clearLayers();
+    // finalizeRoute is the common end-state for both normal animation completion
+    // and skip. It places origin/destination markers, updates the status line,
+    // saves explored-node state for the toggle button, and cleans up.
+    function finalizeRoute(routeData, originAddress, destinationAddress) {
+      // Preserve explored-node data so the toggle can re-render them later.
+      lastVisitedNodes    = routeData.visited_nodes || [];
+      lastAlgorithmColour = ALGORITHM_COLOUR[routeData.algorithm] || '#3b82f6';
+      visitedNodesVisible = false;
 
-      const pathLatLngs = routeData.path.map(n => [n.lat, n.lon]);
-      routePolyline = L.polyline(pathLatLngs, { color: '#2563eb', weight: 4 }).addTo(map);
+      markerGroup.clearLayers();
 
       L.marker([routeData.origin_coord.lat, routeData.origin_coord.lon])
         .bindPopup('<strong>Origin</strong><br>' + originAddress)
@@ -548,8 +608,8 @@
         .bindPopup('<strong>Destination</strong><br>' + destinationAddress)
         .addTo(markerGroup);
 
-      const distanceKm   = (routeData.distance_meters / 1000).toFixed(2);
-      const exploredCount = (routeData.visited_nodes || []).length;
+      const distanceKm    = (routeData.distance_meters / 1000).toFixed(2);
+      const exploredCount = lastVisitedNodes.length;
       showStatus(
         'Route found \u2014 ' + routeData.algorithm + ' \u2014 ' +
         distanceKm + '\u00a0km \u2014 ' + routeData.path.length + ' nodes' +
@@ -558,10 +618,40 @@
 
       pendingRouteData = null;
       showSkipButton(false);
+      showToggleVisitedButton(true);
     }
 
-    // clearRoute removes all route and visited-node overlays from the map and
-    // hides the legend. Called before starting a new route request.
+    // ---------------------------------------------------------------------------
+    // Explored-node toggle (available after route is drawn)
+    // ---------------------------------------------------------------------------
+
+    // toggleVisitedNodes shows or hides the explored-node circles. The circles
+    // are re-rendered from lastVisitedNodes each time they are toggled on,
+    // so no extra memory is held in live Leaflet layers when hidden.
+    function toggleVisitedNodes() {
+      if (visitedNodesVisible) {
+        visitedGroup.clearLayers();
+        visitedNodesVisible = false;
+      } else {
+        lastVisitedNodes.forEach(node => {
+          L.circleMarker([node.lat, node.lon], {
+            radius:      3,
+            color:       'transparent',
+            fillColor:   lastAlgorithmColour,
+            fillOpacity: 0.35,
+          }).addTo(visitedGroup);
+        });
+        visitedNodesVisible = true;
+      }
+      updateToggleVisitedButtonLabel();
+    }
+
+    // ---------------------------------------------------------------------------
+    // Map layer management
+    // ---------------------------------------------------------------------------
+
+    // clearRoute removes all overlays from the map and resets toggle state.
+    // Called before starting a new route request.
     function clearRoute() {
       if (routePolyline) {
         map.removeLayer(routePolyline);
@@ -569,7 +659,10 @@
       }
       markerGroup.clearLayers();
       visitedGroup.clearLayers();
+      lastVisitedNodes    = [];
+      visitedNodesVisible = false;
       document.getElementById('legend').classList.remove('visible');
+      showToggleVisitedButton(false);
     }
 
     // ---------------------------------------------------------------------------
@@ -583,7 +676,18 @@
     }
 
     function showSkipButton(visible) {
-      document.getElementById('skip-button').style.display = visible ? '' : 'none';
+      document.getElementById('skip-button').style.display = visible ? 'block' : 'none';
+    }
+
+    function showToggleVisitedButton(visible) {
+      const btn = document.getElementById('toggle-visited-button');
+      btn.style.display = visible ? 'block' : 'none';
+      if (visible) updateToggleVisitedButtonLabel();
+    }
+
+    function updateToggleVisitedButtonLabel() {
+      document.getElementById('toggle-visited-button').textContent =
+        visitedNodesVisible ? 'Hide explored nodes' : 'Show explored nodes';
     }
 
     // updateLegend sets the explored-nodes swatch colour and label to match

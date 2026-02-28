@@ -1,0 +1,160 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#controls {
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+#controls label {
+  font-size: 0.85rem;
+  color: #555;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+}
+
+#controls input,
+#controls select {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  width: 100%;
+}
+
+#find-route-button {
+  padding: 8px 20px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+#find-route-button:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+#skip-button {
+  padding: 8px 16px;
+  background: #f97316;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  display: none; /* shown only during animation */
+}
+
+#skip-button:hover { background: #ea6b0e; }
+
+#toggle-visited-button {
+  padding: 8px 16px;
+  background: #6b7280;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  display: none; /* shown only after a route is drawn */
+}
+
+#toggle-visited-button:hover { background: #4b5563; }
+
+/* Speed control — compact inline label+select */
+#speed-label {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+#status-message {
+  font-size: 0.85rem;
+  color: #666;
+  padding: 4px 0;
+  width: 100%;
+}
+
+#status-message.error { color: #dc2626; }
+
+/* Legend — shown below status when a route has been drawn */
+#legend {
+  display: none;
+  gap: 16px;
+  font-size: 0.78rem;
+  color: #555;
+  width: 100%;
+  align-items: center;
+}
+
+#legend.visible { display: flex; }
+
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.legend-item { display: flex; align-items: center; }
+
+#map { flex: 1; }
+
+/* Autocomplete */
+.autocomplete-wrapper {
+  position: relative;
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 1000;
+  display: none;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.autocomplete-item {
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autocomplete-item:last-child { border-bottom: none; }
+
+.autocomplete-item:hover,
+.autocomplete-item.active {
+  background: #eff6ff;
+}

@@ -64,12 +64,16 @@ func BuildNetwork(response overpass.Response, options BuildOptions) (*graph.Netw
 
 			distance := geo.DistanceMeters(fromNode.Coord, toNode.Coord)
 
+			// Use the Tag() helper rather than direct map access so a nil Tags
+			// map is handled explicitly and the intent is self-documenting.
+			wayName, _ := way.Tag("name")
+
 			forwardEdge := graph.Edge{
 				From:   fromNode.ID,
 				To:     toNode.ID,
 				Weight: distance,
 				WayID:  way.Id,
-				Name:   way.Tags["name"],
+				Name:   wayName,
 			}
 			if err := net.AddEdge(forwardEdge); err != nil {
 				return nil, stats, err
@@ -82,7 +86,7 @@ func BuildNetwork(response overpass.Response, options BuildOptions) (*graph.Netw
 					To:     fromNode.ID,
 					Weight: distance,
 					WayID:  way.Id,
-					Name:   way.Tags["name"],
+					Name:   wayName,
 				}
 				if err := net.AddEdge(backwardEdge); err != nil {
 					return nil, stats, err

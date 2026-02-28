@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"algoroute/server"
@@ -222,6 +223,48 @@ func TestHandleRoute_ValidRequest_ReturnsVisitedNodes(t *testing.T) {
 		if _, hasLon := node["lon"]; !hasLon {
 			t.Errorf("visited_nodes[%d] missing 'lon' field", i)
 		}
+	}
+}
+
+func TestHandleRoute_OversizedBody_Returns400WithTooLargeError(t *testing.T) {
+	// Without a body-size cap, a malicious client can send an arbitrarily large
+	// JSON payload to exhaust server memory (denial-of-service). The handler must
+	// reject bodies that exceed 1 MB and report a human-readable error.
+	//
+	// A valid JSON body (rather than garbage) is used here so that — before the
+	// fix — the decoder would succeed and proceed to geocoding (returning 500),
+	// making the test correctly RED before MaxBytesReader is applied.
+	srv := server.NewWithOptions(server.Options{StaticDir: "."})
+
+	// Build a valid JSON object whose "origin" value inflates the body past 1 MB.
+	const limitBytes = 1 << 20 // 1 MB
+	origin := strings.Repeat("x", limitBytes)
+	bodyStr := `{"origin":"` + origin + `","destination":"b","algorithm":"dijkstra"}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/route", strings.NewReader(bodyStr))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Errorf(
+			"POST /api/route with %d-byte body: got status %d, want 400 — "+
+				"oversized bodies must be rejected before geocoding is attempted",
+			len(bodyStr), recorder.Code,
+		)
+	}
+
+	var errResp map[string]string
+	if err := json.Unmarshal(recorder.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if !strings.Contains(errResp["error"], "too large") {
+		t.Errorf(
+			"POST /api/route oversized body: error message = %q, want it to contain \"too large\" — "+
+				"the client must know the body was rejected for size, not a JSON parse error",
+			errResp["error"],
+		)
 	}
 }
 

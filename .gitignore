@@ -1,5 +1,12 @@
 # Build output
 backend/algoroute
+frontend/dist/
+
+# Node
+frontend/node_modules/
+frontend/.npm/
+frontend/.cache/
+frontend/*.tsbuildinfo
 
 # Raw OSM data files — large, not source code
 backend/*.json

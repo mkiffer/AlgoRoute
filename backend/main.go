@@ -17,7 +17,7 @@ func main() {
 	// Server mode flags — used when -serve is present.
 	serveMode   := flag.Bool("serve", false, "run as HTTP server instead of CLI")
 	listenPort  := flag.String("port", "8080", "HTTP listen port (used with -serve)")
-	frontendDir := flag.String("frontend", "../frontend", "path to frontend directory (used with -serve)")
+	frontendDir := flag.String("frontend", "../frontend/dist", "path to frontend directory (used with -serve)")
 
 	// CLI mode flags — used when -serve is absent.
 	dataFile := flag.String("data", "", "path to OSM JSON file")
@@ -53,7 +53,7 @@ func runHTTPServer(port, frontendDir string) {
 func runCLI(dataFile string, startID, endID int64, algo string) {
 	if dataFile == "" || startID == 0 || endID == 0 {
 		fmt.Fprintln(os.Stderr, "usage: algoroute -data <file.json> -start <nodeID> -end <nodeID> [-algo dijkstra|astar]")
-		fmt.Fprintln(os.Stderr, "       algoroute -serve [-port 8080] [-frontend ../frontend] [-algo dijkstra|astar]")
+		fmt.Fprintln(os.Stderr, "       algoroute -serve [-port 8080] [-frontend ../frontend/dist] [-algo dijkstra|astar]")
 		os.Exit(1)
 	}
 

@@ -15,24 +15,21 @@
 | A* algorithm (`routefinding/astar.go`) | Complete | 9 passing tests + 1 A*-vs-Dijkstra efficiency test |
 | Router interface (`routefinding/router.go`) | Complete | `DijkstraRouter` and `AStarRouter` wrappers; returns `RouteResult` |
 | Service layer (`services/`) | Complete | 11 passing tests (8 original + 3 RouteByAddress) |
-| HTTP server (`server/`) | Complete | 4 passing tests (handleRoute: 200, 400 ×2, visited_nodes) |
+| HTTP server (`server/`) | Complete | 8 passing tests (handleRoute: 200, 400 ×3, visited_nodes; suggest: empty, valid, failure) |
 | `main.go` | Complete | `-serve`, `-port`, `-frontend`, `-data`, `-start`, `-end`, `-algo` flags |
 | Frontend (`frontend/index.html`) | Complete | Leaflet map, address inputs, traversal animation, speed slider |
 
-**Total: 52 tests passing** (`go test ./...` from `backend/`)
+**Total: 53 tests passing** (`go test ./...` from `backend/`)
 
 ## Known Issues
 
 ### Security
 - **No CORS headers** — backend sets no CORS headers; frontend will fail if served from a different origin.
-- **No request body size limit** — HTTP handlers accept arbitrarily large JSON bodies (DoS risk).
 - **No rate limiting** — autocomplete fires on every keystroke (debounced), but the backend has no per-IP throttling.
 - **No input length validation** — addresses are forwarded to Nominatim without length or character checks.
 - **Unvalidated bbox coordinates** — `BBoxFromCoords` does not enforce ±90° / ±180° bounds.
 
 ### Error Handling
-- **`json.Encode` error ignored** — `writeJSON()` in `server/handlers.go:50` discards the encoder error.
-- **Nil `Tags` map** — `mapping/road_mapper.go:72,85` accesses `way.Tags["name"]` without guarding against a nil map (panics if `Tags` is nil).
 - **Silent suggestion failures** — `geo/suggest.go` skips unparseable lat/lon with `continue` and no logging, making failures invisible.
 - **Non-JSON error responses** — frontend (`index.html:414`) parses `data.error` but doesn't handle the case where the API returns non-JSON on error.
 
