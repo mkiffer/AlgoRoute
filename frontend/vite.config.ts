@@ -11,7 +11,9 @@ export default defineConfig({
     proxy: {
       // Forward /api/* to the Go backend during development so the browser
       // sees a single origin and there are no CORS issues.
-      '/api': { target: 'http://localhost:8080' },
+      // The trailing slash is intentional: '/api/' matches /api/route and
+      // /api/suggest but NOT /api.ts, which Vite must serve as a local module.
+      '/api/': { target: 'http://localhost:8080' },
     },
   },
   test: {
