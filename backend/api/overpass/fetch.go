@@ -13,6 +13,11 @@ import (
 
 const overpassAPIURL = "https://overpass-api.de/api/interpreter"
 
+// maxResponseBytes is the maximum Overpass response body size we will read into
+// memory. 10 MB is generous for city-scale queries but prevents out-of-memory
+// crashes when a large bounding box (e.g. Melbourne → Geelong) returns 100+ MB.
+const maxResponseBytes = 10 << 20 // 10 MB
+
 // driveableHighwayTypes is the set of OSM highway tag values that represent
 // roads a car can legally drive on. Footways, cycleways, and service roads
 // are excluded to keep the graph focused on driveable routes.
@@ -65,9 +70,15 @@ func FetchFromAPIWithBaseURL(bbox geo.BBox, baseURL string) (Response, error) {
 		return Response{}, fmt.Errorf("overpass API returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return Response{}, fmt.Errorf("read overpass response body: %w", err)
+	}
+	if len(body) > maxResponseBytes {
+		return Response{}, fmt.Errorf(
+			"overpass response too large (>%d MB): try a smaller area",
+			maxResponseBytes>>20,
+		)
 	}
 
 	var response Response

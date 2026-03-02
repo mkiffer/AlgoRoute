@@ -1,7 +1,6 @@
 package routefinding
 
 import (
-	"container/heap"
 	"fmt"
 	"math"
 
@@ -32,8 +31,8 @@ func AStar(net *graph.Network, start, goal graph.NodeID) (RouteResult, error) {
 	}
 	bestKnownCostTo[start] = 0
 
-	openSet := &priorityQueue{{node: start, cost: estimateCostToGoal(start)}}
-	heap.Init(openSet)
+	openSet := newIndexedHeap()
+	openSet.Push(start, estimateCostToGoal(start))
 
 	// visitedOrder records nodes in the order they are settled — same semantics as
 	// Dijkstra, but A*'s heuristic causes the frontier to expand toward the goal
@@ -41,32 +40,27 @@ func AStar(net *graph.Network, start, goal graph.NodeID) (RouteResult, error) {
 	var visitedOrder []graph.NodeID
 
 	for openSet.Len() > 0 {
-		currentEntry := heap.Pop(openSet).(*heapEntry)
-
-		// Lazy-deletion stale check: heapEntry.cost stores f = g + h at push time.
-		// We compare it against the current best f (recomputed from the latest g)
-		// rather than against g directly, because g is not stored in the entry —
-		// only f is. An alternative would be to add a gCost field to heapEntry, but
-		// that would require modifying the struct shared with Dijkstra. Entries where
-		// a cheaper g (and therefore cheaper f) was found since the push are discarded.
-		if currentEntry.cost > bestKnownCostTo[currentEntry.node]+estimateCostToGoal(currentEntry.node) {
-			continue
-		}
+		current := openSet.Pop()
 
 		// Record settlement before the early-exit so the goal appears in
 		// visitedOrder even though we break immediately after.
-		visitedOrder = append(visitedOrder, currentEntry.node)
+		visitedOrder = append(visitedOrder, current.node)
 
-		if currentEntry.node == goal {
+		if current.node == goal {
 			break
 		}
 
-		for _, edge := range net.Neighbours(currentEntry.node) {
-			tentativeCostToReach := bestKnownCostTo[currentEntry.node] + edge.Weight
+		for _, edge := range net.Neighbours(current.node) {
+			tentativeCostToReach := bestKnownCostTo[current.node] + edge.Weight
 			if tentativeCostToReach < bestKnownCostTo[edge.To] {
 				bestKnownCostTo[edge.To] = tentativeCostToReach
-				arrivedViaNode[edge.To] = currentEntry.node
-				heap.Push(openSet, &heapEntry{node: edge.To, cost: tentativeCostToReach + estimateCostToGoal(edge.To)})
+				arrivedViaNode[edge.To] = current.node
+				fCost := tentativeCostToReach + estimateCostToGoal(edge.To)
+				if openSet.Contains(edge.To) {
+					openSet.DecreasePriority(edge.To, fCost)
+				} else {
+					openSet.Push(edge.To, fCost)
+				}
 			}
 		}
 	}

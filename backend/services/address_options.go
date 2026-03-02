@@ -12,6 +12,12 @@ import (
 // in the fetched network.
 const bboxPaddingDegrees = 0.01
 
+// maxBBoxAreaKm2 is the maximum allowed bounding box area for a route query.
+// Queries exceeding this limit are rejected before hitting the Overpass API to
+// prevent out-of-memory crashes from enormous responses. 500 km² covers roughly
+// a 22 km × 22 km square, which is generous for city-scale routing.
+const maxBBoxAreaKm2 = 500
+
 // AddressRouteRequest describes an address-based routing request.
 // GeocoderBaseURL, DestGeocoderBaseURL, and OverpassBaseURL are optional:
 // when empty, the production API URLs are used. They exist so tests can

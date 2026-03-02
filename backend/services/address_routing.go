@@ -36,6 +36,17 @@ func (s *RoutingService) RouteByAddress(req AddressRouteRequest) (AddressRouteRe
 	// exactly at) the geocoded coordinates are included in the fetch.
 	bbox := geo.BBoxFromCoords(originCoord, destinationCoord, bboxPaddingDegrees)
 
+	// Step 2b: Reject queries that span too large an area. A Melbourne → Geelong
+	// query (75 km) produces a ~1,800 km² bbox whose Overpass response can exceed
+	// 100 MB, crashing the process.
+	areaKm2 := bbox.ApproxAreaKm2()
+	if areaKm2 > maxBBoxAreaKm2 {
+		return AddressRouteResult{}, fmt.Errorf(
+			"query area too large (%.0f km²): maximum is %.0f km² — try closer addresses",
+			areaKm2, float64(maxBBoxAreaKm2),
+		)
+	}
+
 	// Step 3: Fetch the road network.
 	var overpassResponse overpass.Response
 	if req.OverpassBaseURL != "" {

@@ -73,6 +73,50 @@ func TestBBoxFromCoords_PaddingExpandsBeyondBothPoints(t *testing.T) {
 	}
 }
 
+func TestBBoxApproxAreaKm2_OneByOneDegreeAtEquator(t *testing.T) {
+	// At the equator 1° lat ≈ 111.32 km and 1° lon ≈ 111.32 km (cos(0)=1),
+	// so a 1°×1° box should be approximately 111.32² ≈ 12,392 km².
+	box := geo.BBox{MinLat: 0, MaxLat: 1, MinLon: 0, MaxLon: 1}
+	const wantKm2 = 12_392.0
+	const tolerance = 100.0 // ~0.8% — accounts for approximation
+
+	area := box.ApproxAreaKm2()
+
+	if area < wantKm2-tolerance || area > wantKm2+tolerance {
+		t.Errorf("ApproxAreaKm2 equator 1°×1°: got %.1f km², want %.1f ±%.0f", area, wantKm2, tolerance)
+	}
+}
+
+func TestBBoxApproxAreaKm2_MelbourneToGeelong_LargeArea(t *testing.T) {
+	// Melbourne (-37.81, 144.96) to Geelong (-38.15, 144.36) with 0.01 padding.
+	// Lat span: 0.35°, Lon span: 0.61° → area ≈ 0.35*111.32 * 0.61*111.32*cos(-37.98°) ≈ 1,840 km².
+	box := geo.BBoxFromCoords(
+		geo.Coord{Lat: -37.81, Lon: 144.96},
+		geo.Coord{Lat: -38.15, Lon: 144.36},
+		0.01,
+	)
+
+	area := box.ApproxAreaKm2()
+
+	if area < 1500 {
+		t.Errorf("ApproxAreaKm2 Melbourne→Geelong: got %.1f km², expected > 1500", area)
+	}
+	if area > 2500 {
+		t.Errorf("ApproxAreaKm2 Melbourne→Geelong: got %.1f km², expected < 2500", area)
+	}
+}
+
+func TestBBoxApproxAreaKm2_TinyBox_NearZero(t *testing.T) {
+	// A very small box (< 0.001° per side) should produce near-zero area.
+	box := geo.BBox{MinLat: -37.810, MaxLat: -37.809, MinLon: 144.960, MaxLon: 144.961}
+
+	area := box.ApproxAreaKm2()
+
+	if area > 0.02 {
+		t.Errorf("ApproxAreaKm2 tiny box: got %.4f km², expected < 0.02", area)
+	}
+}
+
 func TestBBoxFromCoords_ZeroPadding_ExactBoundsOfInputPoints(t *testing.T) {
 	// With zero padding the bbox edges must equal the coordinates of the two
 	// input points exactly — no implicit expansion.

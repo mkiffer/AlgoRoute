@@ -71,6 +71,34 @@ func TestBuildOverpassQuery_RequestsJSONOutput(t *testing.T) {
 	}
 }
 
+func TestFetchFromAPIWithBaseURL_RejectsOversizedResponse(t *testing.T) {
+	// A response larger than the safety limit must be rejected to prevent
+	// out-of-memory crashes. Without this guard, a large bounding box
+	// (e.g. Melbourne → Geelong) can return 100+ MB of JSON, exhausting
+	// memory during io.ReadAll and json.Unmarshal.
+	oversizedBody := strings.Repeat("x", 11<<20) // 11 MB — exceeds 10 MB limit
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(oversizedBody))
+	}))
+	defer server.Close()
+
+	bbox := geo.BBox{MinLat: -37.85, MinLon: 144.95, MaxLat: -37.80, MaxLon: 145.00}
+
+	_, err := overpass.FetchFromAPIWithBaseURL(bbox, server.URL)
+
+	if err == nil {
+		t.Fatal("FetchFromAPIWithBaseURL: expected error for oversized response, got nil")
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Errorf(
+			"FetchFromAPIWithBaseURL: error should mention 'too large', got: %v",
+			err,
+		)
+	}
+}
+
 func TestFetchFromAPIWithBaseURL_PopulatesWaysNodesAndNodeByID(t *testing.T) {
 	// Verifies that the derived fields (Ways, Nodes, NodeByID) are populated
 	// after fetching, mirroring the behaviour of LoadNetworkFromJSON. Without

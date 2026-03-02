@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"algoroute/mapping"
@@ -127,6 +128,41 @@ func TestRouteByAddress_GeocodingFailure_PropagatesError(t *testing.T) {
 		t.Errorf(
 			"RouteByAddress with unresolvable address: expected an error, got nil",
 		)
+	}
+}
+
+func TestRouteByAddress_OversizedBBox_ReturnsError(t *testing.T) {
+	// Melbourne (-37.81, 144.96) and Geelong (-38.15, 144.36) are ~75 km apart.
+	// The resulting bounding box is ~1,800 km², far exceeding the 500 km² limit.
+	// RouteByAddress must reject this before hitting the Overpass API to prevent
+	// out-of-memory crashes from enormous responses.
+	originServer := httptest.NewServer(nominatimHandler("-37.81", "144.96"))
+	defer originServer.Close()
+
+	destServer := httptest.NewServer(nominatimHandler("-38.15", "144.36"))
+	defer destServer.Close()
+
+	overpassServer := httptest.NewServer(overpassFixtureHandler(t))
+	defer overpassServer.Close()
+
+	routingService, _ := services.NewRoutingService(services.AlgorithmDijkstra)
+	request := services.AddressRouteRequest{
+		Origin:              "Melbourne",
+		Destination:         "Geelong",
+		Algorithm:           services.AlgorithmDijkstra,
+		MapOpts:             mapping.BuildOptions{AssumeBidirectional: true},
+		GeocoderBaseURL:     originServer.URL,
+		DestGeocoderBaseURL: destServer.URL,
+		OverpassBaseURL:     overpassServer.URL,
+	}
+
+	_, err := routingService.RouteByAddress(request)
+
+	if err == nil {
+		t.Fatal("RouteByAddress Melbourne→Geelong: expected area-too-large error, got nil")
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Errorf("RouteByAddress: error should mention 'too large', got: %v", err)
 	}
 }
 
