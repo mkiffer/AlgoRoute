@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"algoroute/graph"
 	"algoroute/mapping"
@@ -34,17 +39,37 @@ func main() {
 	runCLI(*dataFile, *startID, *endID, *algo)
 }
 
-// runHTTPServer starts the AlgoRoute web server on the given port, serving
-// the frontend from frontendDir and the POST /api/route API endpoint.
+// runHTTPServer starts the AlgoRoute web server on the given port and blocks
+// until SIGINT or SIGTERM is received. On signal receipt it performs a graceful
+// shutdown, waiting up to 5 seconds for in-flight requests to complete before
+// returning.
 func runHTTPServer(port, frontendDir string) {
 	srv := server.New(frontendDir)
+	httpSrv := &http.Server{
+		Addr:    ":" + port,
+		Handler: srv,
+	}
 
-	listenAddress := ":" + port
-	log.Printf("AlgoRoute server listening on http://localhost%s", listenAddress)
-	log.Printf("Serving frontend from %q", frontendDir)
+	// signal.NotifyContext cancels ctx when the process receives SIGINT or
+	// SIGTERM. stop() releases the signal channel when we no longer need it.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	if err := http.ListenAndServe(listenAddress, srv); err != nil {
-		log.Fatalf("server: %v", err)
+	go func() {
+		log.Printf("AlgoRoute server listening on http://localhost:%s", port)
+		log.Printf("Serving frontend from %q", frontendDir)
+		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Println("shutting down...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("server shutdown: %v", err)
 	}
 }
 

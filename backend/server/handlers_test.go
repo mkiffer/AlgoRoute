@@ -386,3 +386,95 @@ func TestHandleSuggest_NominatimFailure_Returns200WithEmptyJSONArray(t *testing.
 		)
 	}
 }
+
+func TestCORS_RegularRequest_HasCORSHeaders(t *testing.T) {
+	// Every API response must include CORS headers so browsers allow cross-origin
+	// requests. Without these headers the frontend (served on a different port
+	// in dev) cannot read the response.
+	originStub := httptest.NewServer(nominatimStubHandler("-37.809", "144.959"))
+	defer originStub.Close()
+	destStub := httptest.NewServer(nominatimStubHandler("-37.831", "144.981"))
+	defer destStub.Close()
+	overpassStub := httptest.NewServer(overpassStubHandler(t))
+	defer overpassStub.Close()
+
+	srv := server.NewWithOptions(server.Options{
+		StaticDir:           ".",
+		GeocoderBaseURL:     originStub.URL,
+		DestGeocoderBaseURL: destStub.URL,
+		OverpassBaseURL:     overpassStub.URL,
+	})
+
+	body, _ := json.Marshal(map[string]string{
+		"origin":      "near node 1001",
+		"destination": "near node 1003",
+		"algorithm":   "dijkstra",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/route", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	allowOrigin := recorder.Header().Get("Access-Control-Allow-Origin")
+	if allowOrigin != "*" {
+		t.Errorf(
+			"POST /api/route: Access-Control-Allow-Origin = %q, want \"*\"",
+			allowOrigin,
+		)
+	}
+	allowMethods := recorder.Header().Get("Access-Control-Allow-Methods")
+	if !strings.Contains(allowMethods, "POST") {
+		t.Errorf(
+			"POST /api/route: Access-Control-Allow-Methods = %q, want it to contain \"POST\"",
+			allowMethods,
+		)
+	}
+	allowHeaders := recorder.Header().Get("Access-Control-Allow-Headers")
+	if !strings.Contains(allowHeaders, "Content-Type") {
+		t.Errorf(
+			"POST /api/route: Access-Control-Allow-Headers = %q, want it to contain \"Content-Type\"",
+			allowHeaders,
+		)
+	}
+}
+
+func TestCORS_PreflightRequest_Returns204WithCORSHeaders(t *testing.T) {
+	// Browsers send an OPTIONS preflight before cross-origin POST requests.
+	// The server must respond 204 with CORS headers — without this the browser
+	// blocks the actual request before it is sent.
+	srv := server.NewWithOptions(server.Options{StaticDir: "."})
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/route", nil)
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Errorf(
+			"OPTIONS /api/route: got status %d, want 204 — preflight must be answered immediately",
+			recorder.Code,
+		)
+	}
+	allowOrigin := recorder.Header().Get("Access-Control-Allow-Origin")
+	if allowOrigin != "*" {
+		t.Errorf(
+			"OPTIONS /api/route: Access-Control-Allow-Origin = %q, want \"*\"",
+			allowOrigin,
+		)
+	}
+	allowMethods := recorder.Header().Get("Access-Control-Allow-Methods")
+	if !strings.Contains(allowMethods, "POST") {
+		t.Errorf(
+			"OPTIONS /api/route: Access-Control-Allow-Methods = %q, want it to contain \"POST\"",
+			allowMethods,
+		)
+	}
+	allowHeaders := recorder.Header().Get("Access-Control-Allow-Headers")
+	if !strings.Contains(allowHeaders, "Content-Type") {
+		t.Errorf(
+			"OPTIONS /api/route: Access-Control-Allow-Headers = %q, want it to contain \"Content-Type\"",
+			allowHeaders,
+		)
+	}
+}

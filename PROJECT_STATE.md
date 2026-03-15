@@ -15,16 +15,15 @@
 | A* algorithm (`routefinding/astar.go`) | Complete | 9 passing tests + 1 A*-vs-Dijkstra efficiency test |
 | Router interface (`routefinding/router.go`) | Complete | `DijkstraRouter` and `AStarRouter` wrappers; returns `RouteResult` |
 | Service layer (`services/`) | Complete | 11 passing tests (8 original + 3 RouteByAddress) |
-| HTTP server (`server/`) | Complete | 8 passing tests (handleRoute: 200, 400 ×3, visited_nodes; suggest: empty, valid, failure) |
+| HTTP server (`server/`) | Complete | 12 passing tests (handleRoute: 200, 400 ×3, visited_nodes; suggest: empty, valid, failure; CORS: regular + preflight; panic recovery: panic→500, normal→passthrough) |
 | `main.go` | Complete | `-serve`, `-port`, `-frontend`, `-data`, `-start`, `-end`, `-algo` flags |
 | Frontend (`frontend/index.html`) | Complete | Leaflet map, address inputs, traversal animation, speed slider |
 
-**Total: 53 tests passing** (`go test ./...` from `backend/`)
+**Total: 57 tests passing** (`go test ./...` from `backend/`)
 
 ## Known Issues
 
 ### Security
-- **No CORS headers** — backend sets no CORS headers; frontend will fail if served from a different origin.
 - **No rate limiting** — autocomplete fires on every keystroke (debounced), but the backend has no per-IP throttling.
 - **No input length validation** — addresses are forwarded to Nominatim without length or character checks.
 - **Unvalidated bbox coordinates** — `BBoxFromCoords` does not enforce ±90° / ±180° bounds.
@@ -47,16 +46,13 @@
 - **O(n) nearest-node scan** — `graph.NearestNode()` is a linear scan; a spatial index (k-d tree / quadtree) would be needed for large networks.
 
 ### Code Quality
-- **No graceful shutdown** — `main.go` calls `http.ListenAndServe()` with no signal handling or cleanup on exit.
-- **No panic recovery** — HTTP handlers have no recovery middleware; a nil-map panic would crash the server.
 - **Hardcoded map center** — frontend initialises the Leaflet map at Melbourne (`[-37.82, 144.97]`); should derive centre from the routed coordinates.
 - **Whitespace-only address check** — frontend trims input but does not enforce a minimum meaningful length before submitting.
 - **Exported test-only helpers** — `NominatimURL()` and `SuggestURL()` are exported but only used in tests; could be unexported.
 
 ## Next Steps (Suggested Priority Order)
 
-1. Add CORS middleware to the HTTP server.
-2. Add panic-recovery middleware and graceful shutdown to `main.go`.
+1. ~~Add panic-recovery middleware and graceful shutdown to `main.go`.~~ ✓ Done.
 3. Enforce a max request-body size in the HTTP handler (e.g., `http.MaxBytesReader`).
 4. Fix `writeJSON` to check and log the `json.Encode` error.
 5. Guard against nil `Tags` map in `mapping/road_mapper.go`.

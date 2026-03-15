@@ -9,7 +9,9 @@ or OSM data fetching (see api/overpass/).
 package server
 
 import (
+	"log"
 	"net/http"
+	"runtime/debug"
 
 	"algoroute/services"
 )
@@ -34,8 +36,11 @@ type Options struct {
 // holds a pluggable Router (Dijkstra or A*) that the handler selects per
 // request. This keeps the server decoupled from specific algorithm choices.
 type Server struct {
-	mux  *http.ServeMux
-	opts Options
+	// handler is the fully composed middleware chain, built once at
+	// construction: panicRecovery → cors → mux. Storing it here avoids
+	// reallocating wrapper closures on every request.
+	handler http.Handler
+	opts    Options
 }
 
 // New creates a Server with default options that uses the production external
@@ -47,31 +52,62 @@ func New(staticDir string) *Server {
 // NewWithOptions creates a Server with full option control. URL override fields
 // allow tests to inject httptest servers for Nominatim and Overpass.
 func NewWithOptions(opts Options) *Server {
-	s := &Server{
-		mux:  http.NewServeMux(),
-		opts: opts,
-	}
-	s.registerRoutes()
+	s := &Server{opts: opts}
+	mux := http.NewServeMux()
+	s.registerRoutes(mux)
+	s.handler = panicRecoveryMiddleware(corsMiddleware(mux))
 	return s
 }
 
 // ServeHTTP implements http.Handler so Server can be passed directly to
-// http.ListenAndServe.
+// http.ListenAndServe. All requests pass through the composed middleware chain.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.mux.ServeHTTP(w, r)
+	s.handler.ServeHTTP(w, r)
 }
 
-func (s *Server) registerRoutes() {
+// panicRecoveryMiddleware catches any panic that escapes a handler, logs it
+// with a full stack trace, and writes a 500 response. Without this, a single
+// nil-pointer dereference would crash the entire server process.
+func panicRecoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic recovered in HTTP handler: %v\n%s", rec, debug.Stack())
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// corsMiddleware wraps a handler to add CORS headers on every response and
+// handle OPTIONS preflight requests. This allows browser clients served from
+// a different origin (e.g. the Vite dev server on :5173) to call the API.
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Serve the frontend from the configured static directory. Any file not
 	// matched by the API routes below will be served from disk, allowing the
 	// frontend to reference CSS, JS, and other assets without additional routing.
-	s.mux.Handle("/", http.FileServer(http.Dir(s.opts.StaticDir)))
+	mux.Handle("/", http.FileServer(http.Dir(s.opts.StaticDir)))
 
 	// POST /api/route finds a route between two addresses.
-	s.mux.HandleFunc("POST /api/route", s.handleRoute)
+	mux.HandleFunc("POST /api/route", s.handleRoute)
 
 	// GET /api/suggest returns address autocomplete suggestions from Nominatim.
-	s.mux.HandleFunc("GET /api/suggest", s.handleSuggest)
+	mux.HandleFunc("GET /api/suggest", s.handleSuggest)
 }
 
 // newRoutingServiceForAlgorithm returns a RoutingService for the given
