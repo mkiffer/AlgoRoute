@@ -33,6 +33,16 @@ export const ALGORITHM_COLOUR: Record<Algorithm, string> = {
 // rate gives a smooth, visible draw without feeling sluggish.
 export const PATH_ANIMATION_INTERVAL_MS = 0.5;
 
+// Total duration of the retreat animation in milliseconds. Each node is
+// assigned its own timeout within this window based on its distance from
+// the route — far nodes fire early, close nodes linger until the end.
+export const RETREAT_DURATION_MS = 800;
+
+// Maximum random timing offset applied to each node's retreat delay, in
+// milliseconds. The jitter de-synchronises nodes at similar distances so
+// removal feels scattered and organic rather than advancing in lock-step.
+export const RETREAT_JITTER_MS = 150;
+
 // Minimum query length before a suggestion fetch is triggered. Fewer than two
 // characters return too many irrelevant results from Nominatim.
 export const AUTOCOMPLETE_MIN_QUERY_LENGTH = 2;

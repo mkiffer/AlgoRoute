@@ -66,9 +66,6 @@ func LoadNetworkFromJSON(jsonFilePath string) (Response, error) {
 	return response, nil
 }
 
-func (e Element) IsWay() bool  { return e.Type == "way" }
-func (e Element) IsNode() bool { return e.Type == "node" }
-
 func (e Element) Tag(key string) (string, bool) {
 	if e.Tags == nil {
 		return "", false

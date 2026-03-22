@@ -4,6 +4,7 @@ frontend/dist/
 
 # Node
 frontend/node_modules/
+frontend/src/node_modules/
 frontend/.npm/
 frontend/.cache/
 frontend/*.tsbuildinfo

@@ -4,8 +4,18 @@
 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Coord, RouteResponse, MapStyle } from './types';
-import { TILE_LAYERS, DEFAULT_MAP_STYLE } from './config';
+import type { Coord, RouteResponse, MapStyle, Algorithm } from './types';
+import { TILE_LAYERS, DEFAULT_MAP_STYLE, RETREAT_DURATION_MS, RETREAT_JITTER_MS } from './config';
+
+// RetreatOptions controls the algorithm-specific retreat strategy used by
+// startRetreat. Dijkstra collapses inward from the origin; A* collapses
+// from the sides of the origin→destination corridor.
+export interface RetreatOptions {
+  algorithm:  Algorithm;
+  origin:     Coord;
+  dest:       Coord;
+  pathCoords: Coord[];
+}
 
 export class MapController {
   private readonly map: L.Map;
@@ -24,7 +34,8 @@ export class MapController {
   private mapClickHandler: ((e: L.LeafletMouseEvent) => void) | null = null;
 
   constructor(containerId: string) {
-    this.map = L.map(containerId).setView([-37.82, 144.97], 13);
+    this.map = L.map(containerId, { zoomControl: false }).setView([-37.82, 144.97], 13);
+    L.control.zoom({ position: 'topright' }).addTo(this.map);
 
     const defaultConfig = TILE_LAYERS[DEFAULT_MAP_STYLE];
     this.tileLayer = L.tileLayer(defaultConfig.url, {
@@ -68,26 +79,91 @@ export class MapController {
     }).addTo(this.visitedGroup);
   }
 
-  // addVisitedTendril draws a thin line from `from` to `to` on the visited
-  // layer and marks the tip with a small dot. Together these produce the
-  // branching vein-like growth seen during the traversal animation.
-  addVisitedTendril(from: Coord, to: Coord, colour: string): void {
-    L.polyline([[from.lat, from.lon], [to.lat, to.lon]], {
-      color:   colour,
-      weight:  1.5,
-      opacity: 0.45,
-    }).addTo(this.visitedGroup);
-    L.circleMarker([to.lat, to.lon], {
+  // addVisitedDot places a small standalone dot for Dijkstra's ripple-style
+  // traversal. No connecting line — the natural distance-ordering of Dijkstra
+  // settlement makes the dots form expanding concentric rings on their own.
+  addVisitedDot(coord: Coord, colour: string): void {
+    L.circleMarker([coord.lat, coord.lon], {
       radius:      2,
       color:       'transparent',
       fillColor:   colour,
-      fillOpacity: 0.75,
+      fillOpacity: 0.7,
+    }).addTo(this.visitedGroup);
+  }
+
+  // addVisitedTendril draws a thin line from `from` to `to` on the visited
+  // layer and marks the tip with a small dot. Together these produce the
+  // branching vein-like growth seen during the traversal animation.
+  // When glowIntensity (0–1) is provided (A* mode), opacity and dot size
+  // scale with proximity to the destination — bright near the goal, dim far away.
+  addVisitedTendril(from: Coord, to: Coord, colour: string, glowIntensity?: number): void {
+    const lineOpacity = glowIntensity !== undefined ? 0.15 + 0.45 * glowIntensity : 0.45;
+    const dotOpacity  = glowIntensity !== undefined ? 0.3  + 0.7  * glowIntensity : 0.75;
+    const dotRadius   = glowIntensity !== undefined ? 1 + 1.5 * glowIntensity     : 1;
+
+    L.polyline([[from.lat, from.lon], [to.lat, to.lon]], {
+      color:   colour,
+      weight:  1.5,
+      opacity: lineOpacity,
+    }).addTo(this.visitedGroup);
+    L.circleMarker([to.lat, to.lon], {
+      radius:      dotRadius,
+      color:       'transparent',
+      fillColor:   colour,
+      fillOpacity: dotOpacity,
     }).addTo(this.visitedGroup);
   }
 
   // clearVisitedLayer removes all explored-node circles from the map.
   clearVisitedLayer(): void {
     this.visitedGroup.clearLayers();
+  }
+
+  // startRetreat gradually removes explored-node layers using an algorithm-
+  // specific distance metric so the retreat visually matches the exploration
+  // pattern. Dijkstra collapses inward from the outer ring toward the origin;
+  // A* collapses from the sides, briefly revealing its narrow search corridor.
+  // Returns a cancel function that immediately clears all remaining layers.
+  startRetreat(opts: RetreatOptions, onDone: () => void): () => void {
+    const layers: L.Layer[] = [];
+    this.visitedGroup.eachLayer(layer => layers.push(layer));
+
+    if (layers.length === 0) {
+      onDone();
+      return () => {};
+    }
+
+    // Pre-compute distances so the max can be used for normalisation.
+    const withDist = layers.map(layer => ({
+      layer,
+      dist: retreatDistance(layerCoord(layer), opts),
+    }));
+    const maxDist = withDist.reduce((m, { dist }) => Math.max(m, dist), 0);
+
+    let remaining = layers.length;
+    let cancelled = false;
+    const handles: ReturnType<typeof setTimeout>[] = [];
+
+    for (const { layer, dist } of withDist) {
+      // progress=0 → far from path, fires early;
+      // progress=1 → close to path, fires near RETREAT_DURATION_MS.
+      const progress = maxDist > 0 ? 1 - dist / maxDist : Math.random();
+      const jitter    = (Math.random() - 0.5) * 2 * RETREAT_JITTER_MS;
+      const delay     = Math.max(0, progress * RETREAT_DURATION_MS + jitter);
+
+      handles.push(setTimeout(() => {
+        if (cancelled) return;
+        this.visitedGroup.removeLayer(layer);
+        remaining--;
+        if (remaining === 0) onDone();
+      }, delay));
+    }
+
+    return () => {
+      cancelled = true;
+      for (const h of handles) clearTimeout(h);
+      this.visitedGroup.clearLayers();
+    };
   }
 
   // startEmptyPolyline creates a new empty polyline on the map. Call
@@ -122,21 +198,40 @@ export class MapController {
       .addTo(this.markerGroup);
   }
 
-  // showVisitedNodes re-renders the traversal tendril network from a saved
-  // coordinate list. Each node is connected to its nearest already-placed
-  // neighbour (within a sliding window) to reproduce the organic branching
-  // that was drawn during the live animation.
-  showVisitedNodes(coords: Coord[], colour: string): void {
+  // showVisitedNodes re-renders the explored-node overlay from a saved
+  // coordinate list, matching the algorithm-specific style used during live
+  // animation. Dijkstra draws standalone dots; A* draws tendril connections
+  // with heuristic glow toward the destination.
+  showVisitedNodes(
+    coords:    Coord[],
+    colour:    string,
+    algorithm: Algorithm,
+    destCoord?: Coord,
+  ): void {
     this.visitedGroup.clearLayers();
     if (coords.length === 0) return;
 
+    if (algorithm === 'dijkstra') {
+      for (const coord of coords) {
+        this.addVisitedDot(coord, colour);
+      }
+      return;
+    }
+
+    // A*: tendril network with heuristic glow.
+    const maxSqDist = destCoord
+      ? coords.reduce((m, c) => Math.max(m, squaredDist(c, destCoord)), 0)
+      : 0;
     const placed: Coord[] = [];
     for (const coord of coords) {
       const nearest = nearestInWindow(coord, placed);
+      const glow = maxSqDist > 0 && destCoord
+        ? 1 - squaredDist(coord, destCoord) / maxSqDist
+        : undefined;
       if (nearest === null) {
         this.addVisitedSeed(coord, colour);
       } else {
-        this.addVisitedTendril(nearest, coord, colour);
+        this.addVisitedTendril(nearest, coord, colour, glow);
       }
       placed.push(coord);
     }
@@ -260,4 +355,52 @@ function nearestInWindow(target: Coord, placed: Coord[]): Coord | null {
 
 function squaredDist(a: Coord, b: Coord): number {
   return (a.lat - b.lat) ** 2 + (a.lon - b.lon) ** 2;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers for startRetreat distance sorting
+// ---------------------------------------------------------------------------
+
+// layerCoord extracts a representative coordinate from a Leaflet layer using
+// duck typing so it works with both real Leaflet objects and test mocks.
+// CircleMarker → its centre point; Polyline → midpoint of its coordinate array.
+function layerCoord(layer: L.Layer): Coord | null {
+  if ('getLatLng' in layer && typeof (layer as any).getLatLng === 'function') {
+    const ll = (layer as L.CircleMarker).getLatLng();
+    return { lat: ll.lat, lon: ll.lng };
+  }
+  if ('getLatLngs' in layer && typeof (layer as any).getLatLngs === 'function') {
+    const lls = (layer as L.Polyline).getLatLngs() as L.LatLng[];
+    if (lls.length > 0) {
+      const mid = lls[Math.floor(lls.length / 2)]!;
+      return { lat: mid.lat, lon: mid.lng };
+    }
+  }
+  return null;
+}
+
+// retreatDistance selects the algorithm-appropriate distance metric for the
+// retreat animation. Dijkstra uses distance from origin (concentric ring
+// collapse); A* uses perpendicular distance from the O→D axis (corridor
+// collapse from the sides).
+function retreatDistance(coord: Coord | null, opts: RetreatOptions): number {
+  if (coord === null) return Infinity;
+  if (opts.algorithm === 'dijkstra') {
+    return squaredDist(coord, opts.origin);
+  }
+  // A*: perpendicular distance to origin→dest axis
+  return sqDistToSegment(coord, opts.origin, opts.dest);
+}
+
+// sqDistToSegment returns the squared distance from point p to the closest
+// point on the line segment a→b. Used by the A* retreat to measure how far
+// off the search corridor each explored node sits.
+function sqDistToSegment(p: Coord, a: Coord, b: Coord): number {
+  const dx = b.lat - a.lat;
+  const dy = b.lon - a.lon;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return squaredDist(p, a);
+  const t = Math.max(0, Math.min(1, ((p.lat - a.lat) * dx + (p.lon - a.lon) * dy) / lenSq));
+  const proj: Coord = { lat: a.lat + t * dx, lon: a.lon + t * dy };
+  return squaredDist(p, proj);
 }

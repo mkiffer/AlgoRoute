@@ -2,152 +2,234 @@
 
 body {
   font-family: system-ui, sans-serif;
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Map fills the full viewport — panel floats over it */
+#map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* ── Floating panel ── */
+#panel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 1000;
+  width: 280px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: #18181b;
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  gap: 12px;
+  /* Hide scrollbar but keep scroll behaviour */
+  scrollbar-width: none;
 }
 
-#controls {
-  padding: 12px 16px;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
+#panel::-webkit-scrollbar { display: none; }
+
+/* ── Header ── */
+#panel-header {
+  font-family: ui-monospace, monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f4f4f5;
+}
+
+/* ── Dividers ── */
+.divider {
+  border: none;
+  border-top: 1px solid #3f3f46;
+  margin: 0;
+}
+
+/* ── Input group ── */
+.input-group {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: flex-end;
-  flex-wrap: wrap;
 }
 
-#controls label {
-  font-size: 0.85rem;
-  color: #555;
+/* ── Labels ── */
+#panel label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #a1a1aa;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
-  min-width: 200px;
 }
 
-#controls input,
-#controls select {
-  padding: 6px 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 0.95rem;
+/* ── Inputs and selects ── */
+#panel input,
+#panel select {
+  padding: 8px 10px;
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  color: #f4f4f5;
+  font-size: 0.88rem;
   width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
 }
 
+#panel input::placeholder {
+  color: #52525b;
+}
+
+#panel input:focus,
+#panel select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Select arrow colour fix for dark bg */
+#panel select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a1a1aa' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+  cursor: pointer;
+}
+
+/* ── Settings group ── */
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Buttons ── */
 #find-route-button {
-  padding: 8px 20px;
-  background: #2563eb;
+  width: 100%;
+  padding: 10px;
+  background: #3b82f6;
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.95rem;
-  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.15s;
 }
 
+#find-route-button:hover { background: #2563eb; }
+
 #find-route-button:disabled {
-  background: #93c5fd;
+  background: #1d4ed8;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 #skip-button {
-  padding: 8px 16px;
+  width: 100%;
+  padding: 8px;
   background: #f97316;
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.95rem;
-  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: background 0.15s;
   display: none; /* shown only during animation */
 }
 
 #skip-button:hover { background: #ea6b0e; }
 
 #toggle-visited-button {
-  padding: 8px 16px;
-  background: #6b7280;
-  color: #fff;
+  width: 100%;
+  padding: 8px;
+  background: #52525b;
+  color: #f4f4f5;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.95rem;
-  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: background 0.15s;
   display: none; /* shown only after a route is drawn */
 }
 
-#toggle-visited-button:hover { background: #4b5563; }
+#toggle-visited-button:hover { background: #3f3f46; }
 
-/* Speed and map-style controls — compact inline label+select */
-#speed-label,
-#map-style-label {
-  flex: 0 0 auto;
-  min-width: 0;
-}
-
+/* ── Status message ── */
 #status-message {
-  font-size: 0.85rem;
-  color: #666;
-  padding: 4px 0;
-  width: 100%;
+  font-size: 0.78rem;
+  color: #a1a1aa;
+  line-height: 1.4;
+  /* Hidden when empty via :empty */
 }
 
-#status-message.error { color: #dc2626; }
+#status-message:empty { display: none; }
 
-/* Legend — shown below status when a route has been drawn */
+#status-message.error { color: #f87171; }
+
+/* ── Legend ── */
 #legend {
   display: none;
-  gap: 16px;
-  font-size: 0.78rem;
-  color: #555;
-  width: 100%;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #a1a1aa;
 }
 
 #legend.visible { display: flex; }
 
-.legend-swatch {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  margin-right: 4px;
-  vertical-align: middle;
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.legend-item { display: flex; align-items: center; }
+.legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 
-#map { flex: 1; }
-
-/* Autocomplete */
+/* ── Autocomplete ── */
 .autocomplete-wrapper {
   position: relative;
 }
 
 .autocomplete-dropdown {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 2px);
   left: 0;
   right: 0;
-  background: #fff;
-  border: 1px solid #ccc;
-  border-top: none;
-  border-radius: 0 0 4px 4px;
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
   list-style: none;
-  max-height: 220px;
+  max-height: 200px;
   overflow-y: auto;
   z-index: 1000;
   display: none;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 .autocomplete-item {
-  padding: 7px 10px;
+  padding: 8px 10px;
   font-size: 0.82rem;
+  color: #f4f4f5;
   cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #3f3f46;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -157,5 +239,18 @@ body {
 
 .autocomplete-item:hover,
 .autocomplete-item.active {
-  background: #eff6ff;
+  background: #3f3f46;
+}
+
+/* ── Narrow screen: panel goes full-width at bottom ── */
+@media (max-width: 400px) {
+  #panel {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 60vh;
+    border-radius: 12px 12px 0 0;
+  }
 }

@@ -11,7 +11,7 @@ import type { SuggestResult } from './types';
 
 // SelectCallback is invoked when the user confirms a suggestion by clicking or
 // pressing Enter. The caller can use the Coord fields to snap the map view.
-export type SelectCallback = (suggestion: SuggestResult) => void;
+type SelectCallback = (suggestion: SuggestResult) => void;
 
 // setupAutocomplete wires predictive address suggestions to an input element.
 // Suggestions are fetched from GET /api/suggest?q=<query> with a debounce.

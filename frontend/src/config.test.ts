@@ -38,8 +38,8 @@ describe('MAX_CLICK_RADIUS_METERS', () => {
 });
 
 describe('DEFAULT_MAP_STYLE', () => {
-  it('is standard', () => {
-    expect(DEFAULT_MAP_STYLE).toBe('standard');
+  it('is dark', () => {
+    expect(DEFAULT_MAP_STYLE).toBe('dark');
   });
 
   it('refers to a key that exists in TILE_LAYERS', () => {

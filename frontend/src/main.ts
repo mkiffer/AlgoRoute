@@ -66,7 +66,7 @@ mapCtrl.onMapClick(handleMapClick);
 // ---------------------------------------------------------------------------
 
 let lastRoute:            RouteResponse | null = null;
-let lastAlgorithmColour   = '#3b82f6';
+let lastAlgorithmColour   = '#f59e0b';
 let visitedNodesVisible   = false;
 
 // Click-to-place state machine.
@@ -82,6 +82,15 @@ let isClickMode        = false;
 // ---------------------------------------------------------------------------
 
 async function handleMapClick(coord: Coord): Promise<void> {
+  // If an animation is running, cancel it and clean up before processing
+  // the click so timers cannot continue drawing onto cleared layers.
+  if (animCtrl.isActive()) {
+    animCtrl.cancel();
+    mapCtrl.clearRouteOverlays();
+    ui.showSkipButton(false);
+    ui.showToggleVisitedButton(false, false);
+  }
+
   if (clickPhase === 'idle' && isClickMode) {
     // Third click — full reset and start over with the new click as origin.
     resetClickMode();
@@ -208,7 +217,7 @@ async function findRoute(): Promise<void> {
     ui.showSkipButton(true);
     ui.updateLegend(
       data.algorithm,
-      ALGORITHM_COLOUR[data.algorithm as keyof typeof ALGORITHM_COLOUR] ?? '#3b82f6',
+      ALGORITHM_COLOUR[data.algorithm as keyof typeof ALGORITHM_COLOUR] ?? '#f59e0b',
     );
     animCtrl.start(data, originAddress, destinationAddress, speed);
   } catch (err: unknown) {
@@ -229,7 +238,7 @@ function finalizeRoute(
   destAddress:      string,
 ): void {
   lastRoute           = route;
-  lastAlgorithmColour = ALGORITHM_COLOUR[route.algorithm as keyof typeof ALGORITHM_COLOUR] ?? '#3b82f6';
+  lastAlgorithmColour = ALGORITHM_COLOUR[route.algorithm as keyof typeof ALGORITHM_COLOUR] ?? '#f59e0b';
   visitedNodesVisible = false;
 
   mapCtrl.placeMarkers(route, originAddress, destAddress);
@@ -260,7 +269,12 @@ function toggleVisitedNodes(): void {
     mapCtrl.clearVisitedLayer();
     visitedNodesVisible = false;
   } else {
-    mapCtrl.showVisitedNodes(lastRoute.visited_nodes, lastAlgorithmColour);
+    mapCtrl.showVisitedNodes(
+      lastRoute.visited_nodes,
+      lastAlgorithmColour,
+      lastRoute.algorithm as import('./types').Algorithm,
+      lastRoute.destination_coord,
+    );
     visitedNodesVisible = true;
   }
 

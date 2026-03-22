@@ -8,10 +8,6 @@ import (
 
 type BuildOptions struct {
 	AssumeBidirectional bool
-
-	AllowedHighwayTypes map[string]bool
-
-	SkipWaysWithMissingNodes bool
 }
 
 type BuildStats struct {
