@@ -68,19 +68,34 @@ func BuildNetwork(response overpass.Response, options BuildOptions) (*graph.Netw
 			// map is handled explicitly and the intent is self-documenting.
 			wayName, _ := way.Tag("name")
 
-			forwardEdge := graph.Edge{
-				From:   fromNode.ID,
-				To:     toNode.ID,
-				Weight: distance,
-				WayID:  way.Id,
-				Name:   wayName,
-			}
-			if err := net.AddEdge(forwardEdge); err != nil {
-				return nil, stats, err
-			}
-			stats.EdgeCount++
+			// Parse the OSM oneway tag to determine which direction(s) are legal.
+			// Tag reference: https://wiki.openstreetmap.org/wiki/Key:oneway
+			onewayTag, _ := way.Tag("oneway")
 
-			if options.AssumeBidirectional {
+			if !isReverseOnlyOneWay(onewayTag) {
+				forwardEdge := graph.Edge{
+					From:   fromNode.ID,
+					To:     toNode.ID,
+					Weight: distance,
+					WayID:  way.Id,
+					Name:   wayName,
+				}
+				if err := net.AddEdge(forwardEdge); err != nil {
+					return nil, stats, err
+				}
+				stats.EdgeCount++
+			}
+
+			// Add the backward edge based on the oneway tag. Precedence:
+			//   oneway=yes/1/true   → no backward edge (one-way forward only)
+			//   oneway=-1/reverse   → backward edge only (reverse-only way)
+			//   oneway=no/0/false   → backward edge (explicitly bidirectional)
+			//   no oneway tag       → backward edge iff AssumeBidirectional=true
+			shouldAddBackward := !isForwardOnlyOneWay(onewayTag) &&
+				(isReverseOnlyOneWay(onewayTag) ||
+					isExplicitlyBidirectional(onewayTag) ||
+					(options.AssumeBidirectional && onewayTag == ""))
+			if shouldAddBackward {
 				backwardEdge := graph.Edge{
 					From:   toNode.ID,
 					To:     fromNode.ID,
@@ -97,4 +112,25 @@ func BuildNetwork(response overpass.Response, options BuildOptions) (*graph.Netw
 	}
 
 	return net, stats, nil
+}
+
+// isForwardOnlyOneWay reports whether the OSM oneway tag value restricts travel
+// to the forward direction (A→B). When true, the backward edge must not be added.
+// Documented OSM values: "yes", "1", "true".
+func isForwardOnlyOneWay(tag string) bool {
+	return tag == "yes" || tag == "1" || tag == "true"
+}
+
+// isReverseOnlyOneWay reports whether the OSM oneway tag value restricts travel
+// to the reverse direction (B→A). When true, the forward edge must not be added.
+// Documented OSM values: "-1", "reverse".
+func isReverseOnlyOneWay(tag string) bool {
+	return tag == "-1" || tag == "reverse"
+}
+
+// isExplicitlyBidirectional reports whether the OSM oneway tag explicitly marks
+// a way as bidirectional. This takes priority over BuildOptions.AssumeBidirectional.
+// Documented OSM values: "no", "0", "false".
+func isExplicitlyBidirectional(tag string) bool {
+	return tag == "no" || tag == "0" || tag == "false"
 }

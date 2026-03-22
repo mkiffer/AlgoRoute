@@ -42,3 +42,6 @@ export type AnimationSpeed = 'slow' | 'medium' | 'fast';
 
 // MapStyle is the set of tile layer styles available in the map style switcher.
 export type MapStyle = 'standard' | 'dark' | 'voyager' | 'minimal';
+
+// ReverseGeocodeResponse mirrors reverseGeocodeResponse in backend/server/handlers.go.
+export interface ReverseGeocodeResponse { address: string; }

@@ -8,8 +8,9 @@ import (
 
 // RoutingService orchestrates network loading and route finding.
 type RoutingService struct {
-	router    routefinding.Router
-	algorithm string
+	router       routefinding.Router
+	algorithm    string
+	networkCache *NetworkCache // nil means no caching — every request hits Overpass
 }
 
 // NewRoutingService returns a RoutingService configured for the named algorithm.
@@ -25,6 +26,19 @@ func NewRoutingService(algorithm string) (*RoutingService, error) {
 		return nil, fmt.Errorf("unknown algorithm %q: use %q or %q", algorithm, AlgorithmDijkstra, AlgorithmAStar)
 	}
 	return &RoutingService{router: router, algorithm: algorithm}, nil
+}
+
+// NewRoutingServiceWithCache returns a RoutingService that uses the provided
+// NetworkCache to skip Overpass fetches when the same bounding box has already
+// been queried. Pass NewNetworkCache() for a fresh cache, or a shared instance
+// to have multiple RoutingService objects benefit from the same cache.
+func NewRoutingServiceWithCache(algorithm string, cache *NetworkCache) (*RoutingService, error) {
+	svc, err := NewRoutingService(algorithm)
+	if err != nil {
+		return nil, err
+	}
+	svc.networkCache = cache
+	return svc, nil
 }
 
 // Route loads the road network from req.DataFile and finds the shortest path.

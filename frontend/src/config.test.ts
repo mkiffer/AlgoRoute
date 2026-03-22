@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TILE_LAYERS, DEFAULT_MAP_STYLE } from './config';
+import { TILE_LAYERS, DEFAULT_MAP_STYLE, MAX_CLICK_RADIUS_METERS } from './config';
 import type { MapStyle } from './types';
 
 // These tests validate the tile layer configuration data that drives the
@@ -28,6 +28,13 @@ describe('TILE_LAYERS', () => {
       });
     });
   }
+});
+
+describe('MAX_CLICK_RADIUS_METERS', () => {
+  it('is a positive number', () => {
+    expect(typeof MAX_CLICK_RADIUS_METERS).toBe('number');
+    expect(MAX_CLICK_RADIUS_METERS).toBeGreaterThan(0);
+  });
 });
 
 describe('DEFAULT_MAP_STYLE', () => {

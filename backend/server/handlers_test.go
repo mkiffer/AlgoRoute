@@ -387,6 +387,116 @@ func TestHandleSuggest_NominatimFailure_Returns200WithEmptyJSONArray(t *testing.
 	}
 }
 
+// reverseNominatimStubHandler returns a minimal Nominatim reverse geocoding
+// response containing the given display_name.
+func reverseNominatimStubHandler(displayName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, _ := json.Marshal(map[string]string{"display_name": displayName})
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}
+}
+
+func TestHandleReverseGeocode_ValidCoords_Returns200WithAddress(t *testing.T) {
+	// A valid lat/lon pair must produce a 200 response whose address field
+	// matches the display_name returned by the Nominatim stub.
+	reverseStub := httptest.NewServer(reverseNominatimStubHandler("Test Street, Melbourne"))
+	defer reverseStub.Close()
+
+	srv := server.NewWithOptions(server.Options{
+		StaticDir:            ".",
+		ReverseGeocodeBaseURL: reverseStub.URL,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/reverse?lat=-37.8136&lon=144.9631", nil)
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"GET /api/reverse valid coords: got status %d, want 200. Body: %s",
+			recorder.Code, recorder.Body.String(),
+		)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("GET /api/reverse: response is not valid JSON: %v", err)
+	}
+	if resp["address"] != "Test Street, Melbourne" {
+		t.Errorf(
+			"GET /api/reverse: address = %q, want %q",
+			resp["address"], "Test Street, Melbourne",
+		)
+	}
+}
+
+func TestHandleReverseGeocode_MissingLat_Returns400(t *testing.T) {
+	// A request without a lat parameter must be rejected with 400 before any
+	// Nominatim call is made — the coordinate is required to reverse-geocode.
+	srv := server.NewWithOptions(server.Options{StaticDir: "."})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/reverse?lon=144.9631", nil)
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Errorf(
+			"GET /api/reverse missing lat: got status %d, want 400",
+			recorder.Code,
+		)
+	}
+
+	var errResp map[string]string
+	json.Unmarshal(recorder.Body.Bytes(), &errResp)
+	if errResp["error"] == "" {
+		t.Errorf(
+			"GET /api/reverse missing lat: expected non-empty 'error' field, got %v",
+			errResp,
+		)
+	}
+}
+
+func TestHandleReverseGeocode_NominatimFailure_Returns200WithEmptyAddress(t *testing.T) {
+	// When Nominatim is unavailable the handler must return 200 with an empty
+	// address string so the frontend can still place a pin and let the user type.
+	failingStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer failingStub.Close()
+
+	srv := server.NewWithOptions(server.Options{
+		StaticDir:            ".",
+		ReverseGeocodeBaseURL: failingStub.URL,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/reverse?lat=-37.8136&lon=144.9631", nil)
+	recorder := httptest.NewRecorder()
+
+	srv.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"GET /api/reverse Nominatim failure: got status %d, want 200 — "+
+				"reverse geocoding must degrade gracefully",
+			recorder.Code,
+		)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("GET /api/reverse: response is not valid JSON: %v", err)
+	}
+	if resp["address"] != "" {
+		t.Errorf(
+			"GET /api/reverse Nominatim failure: address = %q, want empty string",
+			resp["address"],
+		)
+	}
+}
+
 func TestCORS_RegularRequest_HasCORSHeaders(t *testing.T) {
 	// Every API response must include CORS headers so browsers allow cross-origin
 	// requests. Without these headers the frontend (served on a different port

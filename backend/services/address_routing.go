@@ -47,15 +47,26 @@ func (s *RoutingService) RouteByAddress(req AddressRouteRequest) (AddressRouteRe
 		)
 	}
 
-	// Step 3: Fetch the road network.
+	// Step 3: Fetch the road network, using the cache when available.
+	// The cache is keyed by bbox so that two requests covering the same area
+	// (e.g. Dijkstra then A* on the same route) share one Overpass fetch.
 	var overpassResponse overpass.Response
-	if req.OverpassBaseURL != "" {
-		overpassResponse, err = overpass.FetchFromAPIWithBaseURL(bbox, req.OverpassBaseURL)
-	} else {
-		overpassResponse, err = overpass.FetchFromAPI(bbox)
+	servedFromCache := false
+	if s.networkCache != nil {
+		overpassResponse, servedFromCache = s.networkCache.Lookup(bbox)
 	}
-	if err != nil {
-		return AddressRouteResult{}, fmt.Errorf("fetch road network: %w", err)
+	if !servedFromCache {
+		if req.OverpassBaseURL != "" {
+			overpassResponse, err = overpass.FetchFromAPIWithBaseURL(bbox, req.OverpassBaseURL)
+		} else {
+			overpassResponse, err = overpass.FetchFromAPI(bbox)
+		}
+		if err != nil {
+			return AddressRouteResult{}, fmt.Errorf("fetch road network: %w", err)
+		}
+		if s.networkCache != nil {
+			s.networkCache.Store(bbox, overpassResponse)
+		}
 	}
 
 	if len(overpassResponse.Ways) == 0 {
@@ -65,14 +76,10 @@ func (s *RoutingService) RouteByAddress(req AddressRouteRequest) (AddressRouteRe
 		)
 	}
 
-	// Step 4: Build graph.Network.
-	// Default to bidirectional edges: one-way street handling (OSM oneway tag)
-	// is a future enhancement and requires additional mapping logic.
-	mapOpts := req.MapOpts
-	if !mapOpts.AssumeBidirectional {
-		mapOpts.AssumeBidirectional = true
-	}
-	network, _, err := mapping.BuildNetwork(overpassResponse, mapOpts)
+	// Step 4: Build graph.Network from the Overpass response.
+	// MapOpts.AssumeBidirectional controls how untagged ways are treated.
+	// Ways with explicit oneway tags are always respected regardless of this option.
+	network, _, err := mapping.BuildNetwork(overpassResponse, req.MapOpts)
 	if err != nil {
 		return AddressRouteResult{}, fmt.Errorf("build network: %w", err)
 	}

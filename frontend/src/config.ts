@@ -21,11 +21,11 @@ export const SPEED_CONFIG: Record<AnimationSpeed, SpeedSetting> = {
 };
 
 // ALGORITHM_COLOUR maps each algorithm to its visualisation colour.
-// Dijkstra uses blue (the same family as the UI accent) to reinforce that it is
-// the default algorithm. A* uses orange to highlight its directed nature.
+// Both colours sit in the warm amber-orange family so they glow against the
+// dark default map tile, evoking the slime-mould traversal aesthetic.
 export const ALGORITHM_COLOUR: Record<Algorithm, string> = {
-  dijkstra: '#3b82f6',
-  astar:    '#f97316',
+  dijkstra: '#f59e0b',  // amber
+  astar:    '#f97316',  // orange
 };
 
 // Milliseconds between each node appended during the path-drawing animation.
@@ -83,4 +83,10 @@ export const TILE_LAYERS: Record<MapStyle, TileLayerConfig> = {
 };
 
 // DEFAULT_MAP_STYLE is the tile layer shown on initial load.
-export const DEFAULT_MAP_STYLE: MapStyle = 'standard';
+// Dark is the default so the amber traversal tendrils glow against the background.
+export const DEFAULT_MAP_STYLE: MapStyle = 'dark';
+
+// MAX_CLICK_RADIUS_METERS is the maximum distance from the origin at which a
+// destination click is accepted. 20 km produces a bounding box of ≈ 400 km²,
+// which stays under the 500 km² backend limit for Overpass queries.
+export const MAX_CLICK_RADIUS_METERS = 20_000;

@@ -49,13 +49,13 @@ export class AnimationController {
     this.mapCtrl.fitToBounds(allCoords);
 
     if (visited.length === 0) {
-      this.startPathPhase(data, originAddress, destAddress);
+      this.startPathPhase(data, colour, originAddress, destAddress);
       return;
     }
 
     this.startTraversalPhase(visited, colour, speed, () => {
       this.mapCtrl.clearVisitedLayer();
-      this.startPathPhase(data, originAddress, destAddress);
+      this.startPathPhase(data, colour, originAddress, destAddress);
     });
   }
 
@@ -63,10 +63,11 @@ export class AnimationController {
   skip(): void {
     if (this.pendingRoute === null) return;
     const { data, originAddress, destAddress } = this.pendingRoute;
+    const colour = ALGORITHM_COLOUR[data.algorithm as keyof typeof ALGORITHM_COLOUR] ?? '#f59e0b';
 
     this.cancelTimers();
     this.mapCtrl.clearVisitedLayer();
-    this.mapCtrl.drawCompletePolyline(data.path.map(n => ({ lat: n.lat, lon: n.lon })));
+    this.mapCtrl.drawCompletePolyline(data.path.map(n => ({ lat: n.lat, lon: n.lon })), colour);
     this.finalise(data, originAddress, destAddress);
   }
 
@@ -95,6 +96,11 @@ export class AnimationController {
     const total = visited.length;
     let nextIndex = 0;
 
+    // placedCoords accumulates all nodes drawn so far. Each new node connects
+    // to its nearest neighbour within the last 300 placed nodes, producing
+    // the branching tendril growth characteristic of slime-mould exploration.
+    const placedCoords: Coord[] = [];
+
     this.callbacks.onProgress(
       'Exploring\u2026 (0\u00a0/\u00a0' + total.toLocaleString() + ' nodes settled)'
     );
@@ -103,7 +109,15 @@ export class AnimationController {
       const end = Math.min(nextIndex + batchSize, total);
       for (let i = nextIndex; i < end; i++) {
         const node = visited[i];
-        if (node !== undefined) this.mapCtrl.addVisitedMarker(node, colour);
+        if (node === undefined) continue;
+
+        if (placedCoords.length === 0) {
+          this.mapCtrl.addVisitedSeed(node, colour);
+        } else {
+          const nearest = findNearest(node, placedCoords);
+          this.mapCtrl.addVisitedTendril(nearest, node, colour);
+        }
+        placedCoords.push(node);
       }
       nextIndex = end;
 
@@ -122,10 +136,11 @@ export class AnimationController {
 
   private startPathPhase(
     data:          RouteResponse,
+    colour:        string,
     originAddress: string,
     destAddress:   string,
   ): void {
-    this.mapCtrl.startEmptyPolyline();
+    this.mapCtrl.startEmptyPolyline(colour);
     this.callbacks.onProgress('Drawing route\u2026');
 
     const pathCoords = data.path.map(n => ({ lat: n.lat, lon: n.lon }));

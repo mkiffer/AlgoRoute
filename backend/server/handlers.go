@@ -2,8 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"algoroute/geo"
 	"algoroute/mapping"
@@ -76,9 +78,10 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Construct a fresh RoutingService per request so the caller can choose
-	// the algorithm independently on each call. Construction is O(1).
-	routingService, err := newRoutingServiceForAlgorithm(req.Algorithm)
+	// Construct a RoutingService per request (algorithm selection varies per
+	// call) backed by the server's shared NetworkCache so repeated requests
+	// for the same area skip the Overpass fetch.
+	routingService, err := s.newRoutingServiceForAlgorithm(req.Algorithm)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
@@ -155,4 +158,54 @@ func suggestWithOptionalOverride(query, overrideBaseURL string) ([]geo.SuggestRe
 		return geo.SuggestWithBaseURL(query, overrideBaseURL)
 	}
 	return geo.Suggest(query)
+}
+
+// reverseGeocodeResponse is the JSON body returned by GET /api/reverse.
+type reverseGeocodeResponse struct {
+	Address string `json:"address"`
+}
+
+// handleReverseGeocode handles GET /api/reverse?lat=X&lon=Y and returns
+// {"address":"..."} with the reverse-geocoded address string. On any
+// Nominatim failure it returns 200 with an empty address so the frontend can
+// still place a pin and let the user type an address manually.
+func (s *Server) handleReverseGeocode(w http.ResponseWriter, r *http.Request) {
+	latStr := r.URL.Query().Get("lat")
+	lonStr := r.URL.Query().Get("lon")
+
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{
+			Error: fmt.Sprintf("invalid lat: %q", latStr),
+		})
+		return
+	}
+
+	lon, err := strconv.ParseFloat(lonStr, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{
+			Error: fmt.Sprintf("invalid lon: %q", lonStr),
+		})
+		return
+	}
+
+	address, err := reverseGeocodeWithOptionalOverride(geo.Coord{Lat: lat, Lon: lon}, s.opts.ReverseGeocodeBaseURL)
+	if err != nil {
+		// Reverse geocoding is non-critical — return empty address rather than
+		// an error so the frontend can still place the pin with no label.
+		writeJSON(w, http.StatusOK, reverseGeocodeResponse{Address: ""})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, reverseGeocodeResponse{Address: address})
+}
+
+// reverseGeocodeWithOptionalOverride calls ReverseGeocodeWithBaseURL when a
+// non-empty overrideBaseURL is provided (used by tests), or ReverseGeocode
+// when empty (production path).
+func reverseGeocodeWithOptionalOverride(coord geo.Coord, overrideBaseURL string) (string, error) {
+	if overrideBaseURL != "" {
+		return geo.ReverseGeocodeWithBaseURL(coord, overrideBaseURL)
+	}
+	return geo.ReverseGeocode(coord)
 }

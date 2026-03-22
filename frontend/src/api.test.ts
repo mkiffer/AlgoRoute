@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchRoute, fetchSuggestions } from './api';
+import { fetchRoute, fetchSuggestions, fetchReverseGeocode } from './api';
 import type { RouteResponse, SuggestResult } from './types';
 
 // ---------------------------------------------------------------------------
@@ -102,5 +102,41 @@ describe('fetchSuggestions', () => {
 
     const results = await fetchSuggestions('anything');
     expect(results).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchReverseGeocode
+// ---------------------------------------------------------------------------
+
+describe('fetchReverseGeocode', () => {
+  beforeEach(() => { vi.stubGlobal('fetch', vi.fn()); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('fetches from /api/reverse with encoded lat/lon and returns address string', async () => {
+    // Verifies the URL is built correctly and the address field is extracted.
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ address: 'Test Street, Melbourne' }), { status: 200 })
+    );
+
+    const address = await fetchReverseGeocode(-37.8136, 144.9631);
+
+    expect(address).toBe('Test Street, Melbourne');
+
+    const [url] = vi.mocked(fetch).mock.calls[0] as [string];
+    expect(url).toContain('/api/reverse');
+    expect(url).toContain('lat=');
+    expect(url).toContain('lon=');
+  });
+
+  it('returns empty string on any failure', async () => {
+    // Non-ok responses must degrade gracefully — the pin is still placed and
+    // the user can type an address manually.
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response('', { status: 503 })
+    );
+
+    const address = await fetchReverseGeocode(-37.8136, 144.9631);
+    expect(address).toBe('');
   });
 });

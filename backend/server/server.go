@@ -26,7 +26,8 @@ type Options struct {
 	GeocoderBaseURL     string // base URL for origin geocoding (Nominatim)
 	DestGeocoderBaseURL string // base URL for destination geocoding (Nominatim)
 	OverpassBaseURL     string // base URL for Overpass road network fetch
-	SuggestBaseURL      string // base URL for address autocomplete suggestions (Nominatim)
+	SuggestBaseURL        string // base URL for address autocomplete suggestions (Nominatim)
+	ReverseGeocodeBaseURL string // base URL for reverse geocoding (Nominatim /reverse)
 }
 
 // Server handles HTTP requests for AlgoRoute. It serves the static frontend
@@ -41,6 +42,11 @@ type Server struct {
 	// reallocating wrapper closures on every request.
 	handler http.Handler
 	opts    Options
+
+	// networkCache is shared across all requests so that repeated queries for
+	// the same bounding box (e.g. Dijkstra then A* on the same route) reuse
+	// the cached Overpass response rather than re-fetching the road network.
+	networkCache *services.NetworkCache
 }
 
 // New creates a Server with default options that uses the production external
@@ -52,7 +58,10 @@ func New(staticDir string) *Server {
 // NewWithOptions creates a Server with full option control. URL override fields
 // allow tests to inject httptest servers for Nominatim and Overpass.
 func NewWithOptions(opts Options) *Server {
-	s := &Server{opts: opts}
+	s := &Server{
+		opts:         opts,
+		networkCache: services.NewNetworkCache(),
+	}
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 	s.handler = panicRecoveryMiddleware(corsMiddleware(mux))
@@ -108,13 +117,17 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// GET /api/suggest returns address autocomplete suggestions from Nominatim.
 	mux.HandleFunc("GET /api/suggest", s.handleSuggest)
+
+	// GET /api/reverse converts a lat/lon pair into a human-readable address.
+	mux.HandleFunc("GET /api/reverse", s.handleReverseGeocode)
 }
 
 // newRoutingServiceForAlgorithm returns a RoutingService for the given
-// algorithm name, defaulting to Dijkstra when the name is empty.
-func newRoutingServiceForAlgorithm(algorithm string) (*services.RoutingService, error) {
+// algorithm name (defaulting to Dijkstra when empty) backed by the
+// server's shared NetworkCache.
+func (s *Server) newRoutingServiceForAlgorithm(algorithm string) (*services.RoutingService, error) {
 	if algorithm == "" {
 		algorithm = services.AlgorithmDijkstra
 	}
-	return services.NewRoutingService(algorithm)
+	return services.NewRoutingServiceWithCache(algorithm, s.networkCache)
 }

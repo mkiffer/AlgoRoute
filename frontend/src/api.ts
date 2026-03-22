@@ -1,7 +1,7 @@
 // api.ts — typed wrappers around the AlgoRoute backend REST API.
 // All network I/O lives here. No other module calls fetch() directly.
 
-import type { RouteResponse, SuggestResult, Algorithm } from './types';
+import type { RouteResponse, SuggestResult, Algorithm, ReverseGeocodeResponse } from './types';
 
 export interface RouteRequest {
   origin: string;
@@ -36,5 +36,20 @@ export async function fetchSuggestions(query: string): Promise<SuggestResult[]> 
     return response.json() as Promise<SuggestResult[]>;
   } catch {
     return [];
+  }
+}
+
+// fetchReverseGeocode converts a coordinate into a human-readable address by
+// calling GET /api/reverse. Returns "" on any failure — the pin is still
+// placed and the user can type an address manually.
+export async function fetchReverseGeocode(lat: number, lon: number): Promise<string> {
+  try {
+    const url = '/api/reverse?lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon);
+    const response = await fetch(url);
+    if (!response.ok) return '';
+    const data = await response.json() as ReverseGeocodeResponse;
+    return data.address;
+  } catch {
+    return '';
   }
 }
