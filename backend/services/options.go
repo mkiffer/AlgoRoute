@@ -6,8 +6,10 @@ import (
 )
 
 const (
-	AlgorithmDijkstra = "dijkstra"
-	AlgorithmAStar    = "astar"
+	AlgorithmDijkstra             = "dijkstra"
+	AlgorithmAStar                = "astar"
+	AlgorithmGreedyBestFirst      = "greedy"
+	AlgorithmBidirectionalDijkstra = "bidijkstra"
 )
 
 // RouteRequest describes the inputs for a routing operation.

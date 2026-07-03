@@ -48,3 +48,17 @@ type AStarRouter struct{}
 func (AStarRouter) Route(net *graph.Network, start, goal graph.NodeID) (RouteResult, error) {
 	return AStar(net, start, goal)
 }
+
+// GreedyBestFirstRouter implements Router using the Greedy Best-First algorithm.
+type GreedyBestFirstRouter struct{}
+
+func (GreedyBestFirstRouter) Route(net *graph.Network, start, goal graph.NodeID) (RouteResult, error) {
+	return GreedyBestFirst(net, start, goal)
+}
+
+// BidirectionalDijkstraRouter implements Router using Bidirectional Dijkstra.
+type BidirectionalDijkstraRouter struct{}
+
+func (BidirectionalDijkstraRouter) Route(net *graph.Network, start, goal graph.NodeID) (RouteResult, error) {
+	return BidirectionalDijkstra(net, start, goal)
+}

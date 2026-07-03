@@ -4,6 +4,22 @@
 
 import type { Algorithm, AnimationSpeed, MapStyle } from './types';
 
+// AlgorithmVisualStyle determines how explored nodes are rendered during
+// traversal animation. 'dots' draws standalone circular markers that form
+// expanding concentric rings; 'tendrils' draws connected line segments that
+// grow toward the destination like branching veins.
+export type AlgorithmVisualStyle = 'dots' | 'tendrils';
+
+// ALGORITHM_STYLE maps each algorithm to its traversal animation style.
+// Centralising this here prevents scattered algorithm === 'dijkstra' checks
+// across animation.ts and map.ts.
+export const ALGORITHM_STYLE: Record<Algorithm, AlgorithmVisualStyle> = {
+  dijkstra:   'dots',     // radial expansion → concentric rings
+  bidijkstra: 'dots',     // two radial expansions → two concentric rings
+  astar:      'tendrils', // directed heuristic search → corridor tendrils
+  greedy:     'tendrils', // aggressive heuristic sprint → narrower tendrils
+};
+
 // SpeedSetting controls how many explored-node markers are added per animation
 // tick and how many milliseconds elapse between ticks.
 export interface SpeedSetting {
@@ -21,11 +37,11 @@ export const SPEED_CONFIG: Record<AnimationSpeed, SpeedSetting> = {
 };
 
 // ALGORITHM_COLOUR maps each algorithm to its visualisation colour.
-// Both colours sit in the warm amber-orange family so they glow against the
-// dark default map tile, evoking the slime-mould traversal aesthetic.
 export const ALGORITHM_COLOUR: Record<Algorithm, string> = {
-  dijkstra: '#f59e0b',  // amber
-  astar:    '#f97316',  // orange
+  dijkstra:   '#f59e0b',  // amber    — radial warm glow
+  astar:      '#f97316',  // orange   — directed warm sprint
+  greedy:     '#10b981',  // emerald  — fast heuristic sprint toward goal
+  bidijkstra: '#8b5cf6',  // purple   — two-frontier pincer
 };
 
 // Milliseconds between each node appended during the path-drawing animation.

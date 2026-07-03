@@ -14,7 +14,8 @@ type RoutingService struct {
 }
 
 // NewRoutingService returns a RoutingService configured for the named algorithm.
-// Valid values are AlgorithmDijkstra and AlgorithmAStar.
+// Valid values are AlgorithmDijkstra, AlgorithmAStar, AlgorithmGreedyBestFirst,
+// and AlgorithmBidirectionalDijkstra.
 func NewRoutingService(algorithm string) (*RoutingService, error) {
 	var router routefinding.Router
 	switch algorithm {
@@ -22,8 +23,14 @@ func NewRoutingService(algorithm string) (*RoutingService, error) {
 		router = routefinding.DijkstraRouter{}
 	case AlgorithmAStar:
 		router = routefinding.AStarRouter{}
+	case AlgorithmGreedyBestFirst:
+		router = routefinding.GreedyBestFirstRouter{}
+	case AlgorithmBidirectionalDijkstra:
+		router = routefinding.BidirectionalDijkstraRouter{}
 	default:
-		return nil, fmt.Errorf("unknown algorithm %q: use %q or %q", algorithm, AlgorithmDijkstra, AlgorithmAStar)
+		return nil, fmt.Errorf("unknown algorithm %q: valid options are %q, %q, %q, %q",
+			algorithm, AlgorithmDijkstra, AlgorithmAStar,
+			AlgorithmGreedyBestFirst, AlgorithmBidirectionalDijkstra)
 	}
 	return &RoutingService{router: router, algorithm: algorithm}, nil
 }

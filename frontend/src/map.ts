@@ -5,7 +5,7 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Coord, RouteResponse, MapStyle, Algorithm } from './types';
-import { TILE_LAYERS, DEFAULT_MAP_STYLE, RETREAT_DURATION_MS, RETREAT_JITTER_MS } from './config';
+import { TILE_LAYERS, DEFAULT_MAP_STYLE, ALGORITHM_STYLE, RETREAT_DURATION_MS, RETREAT_JITTER_MS } from './config';
 
 // RetreatOptions controls the algorithm-specific retreat strategy used by
 // startRetreat. Dijkstra collapses inward from the origin; A* collapses
@@ -211,14 +211,14 @@ export class MapController {
     this.visitedGroup.clearLayers();
     if (coords.length === 0) return;
 
-    if (algorithm === 'dijkstra') {
+    if (ALGORITHM_STYLE[algorithm] === 'dots') {
       for (const coord of coords) {
         this.addVisitedDot(coord, colour);
       }
       return;
     }
 
-    // A*: tendril network with heuristic glow.
+    // Tendril-style algorithms (A*, Greedy): connected network with heuristic glow.
     const maxSqDist = destCoord
       ? coords.reduce((m, c) => Math.max(m, squaredDist(c, destCoord)), 0)
       : 0;
@@ -385,10 +385,13 @@ function layerCoord(layer: L.Layer): Coord | null {
 // collapse from the sides).
 function retreatDistance(coord: Coord | null, opts: RetreatOptions): number {
   if (coord === null) return Infinity;
-  if (opts.algorithm === 'dijkstra') {
+  if (ALGORITHM_STYLE[opts.algorithm] === 'dots') {
+    // Dot-style algorithms (Dijkstra, Bidirectional): collapse inward from the
+    // outer ring toward the origin.
     return squaredDist(coord, opts.origin);
   }
-  // A*: perpendicular distance to origin→dest axis
+  // Tendril-style algorithms (A*, Greedy): collapse from the sides of the
+  // origin→destination corridor.
   return sqDistToSegment(coord, opts.origin, opts.dest);
 }
 

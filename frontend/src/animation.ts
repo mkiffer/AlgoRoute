@@ -4,7 +4,7 @@
 
 import type { MapController } from './map';
 import type { RouteResponse, AnimationSpeed, Coord, Algorithm } from './types';
-import { SPEED_CONFIG, ALGORITHM_COLOUR, PATH_ANIMATION_INTERVAL_MS, RETREAT_DURATION_MS } from './config';
+import { SPEED_CONFIG, ALGORITHM_COLOUR, ALGORITHM_STYLE, PATH_ANIMATION_INTERVAL_MS, RETREAT_DURATION_MS } from './config';
 
 // AnimationCallbacks connect the animation lifecycle to the caller (main.ts).
 // onProgress is called with a status message at each interval tick.
@@ -115,9 +115,11 @@ export class AnimationController {
     const total = visited.length;
     let nextIndex = 0;
 
-    // A* glow: pre-compute maximum squared distance to destination so each
-    // node's intensity can be normalised to 0–1.
-    const maxSqDistToDest = algorithm === 'astar'
+    // Tendril glow: pre-compute maximum squared distance to destination so each
+    // node's intensity can be normalised to 0–1. Applies to all tendril-style
+    // algorithms (A*, Greedy) where the heuristic guides exploration directionally.
+    const isTendrils = ALGORITHM_STYLE[algorithm] === 'tendrils';
+    const maxSqDistToDest = isTendrils
       ? visited.reduce((m, v) => Math.max(m, squaredDist(v, destCoord)), 0)
       : 0;
 
@@ -137,11 +139,13 @@ export class AnimationController {
         const node = visited[i];
         if (node === undefined) continue;
 
-        if (algorithm === 'dijkstra') {
-          // Dijkstra: standalone dots form expanding concentric rings.
+        if (ALGORITHM_STYLE[algorithm] === 'dots') {
+          // Dot-style algorithms (Dijkstra, Bidirectional Dijkstra): standalone
+          // dots that form expanding concentric rings.
           this.mapCtrl.addVisitedDot(node, colour);
         } else {
-          // A*: directed tendrils with heuristic glow.
+          // Tendril-style algorithms (A*, Greedy): directed tendrils with
+          // heuristic glow scaling opacity by proximity to the destination.
           const glow = maxSqDistToDest > 0
             ? 1 - squaredDist(node, destCoord) / maxSqDistToDest
             : undefined;

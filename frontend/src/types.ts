@@ -35,7 +35,7 @@ export interface SuggestResult {
 }
 
 // Algorithm is the set of routing algorithm identifiers the backend accepts.
-export type Algorithm = 'dijkstra' | 'astar';
+export type Algorithm = 'dijkstra' | 'astar' | 'greedy' | 'bidijkstra';
 
 // AnimationSpeed maps to the keys in SPEED_CONFIG.
 export type AnimationSpeed = 'slow' | 'medium' | 'fast';
