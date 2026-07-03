@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AlgoRoute — Haskell Rewrite Plan</title>
+  <style>
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2e3147;
+      --text:      #e2e4ef;
+      --muted:     #7c80a0;
+      --accent:    #7c6af7;
+      --accent2:   #4eadff;
+      --green:     #4eca8b;
+      --yellow:    #f5c542;
+      --red:       #f07070;
+      --code-bg:   #12141e;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    /* ── Layout ── */
+    .layout { display: flex; min-height: 100vh; }
+
+    nav {
+      width: 240px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 32px 0 32px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    nav .logo {
+      padding: 0 20px 24px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--accent);
+    }
+
+    nav ul { list-style: none; }
+    nav ul li a {
+      display: block;
+      padding: 6px 20px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      border-left: 3px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    nav ul li a:hover { color: var(--text); border-color: var(--accent); }
+    nav ul li.section {
+      padding: 16px 20px 4px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--border);
+    }
+
+    main {
+      flex: 1;
+      padding: 48px 56px 80px;
+      max-width: 880px;
+    }
+
+    /* ── Typography ── */
+    h1 { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+    .subtitle { color: var(--muted); font-size: 15px; margin-bottom: 40px; }
+
+    h2 {
+      font-size: 19px;
+      font-weight: 700;
+      color: #fff;
+      margin: 48px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent2);
+      margin: 28px 0 10px;
+    }
+
+    p { margin-bottom: 14px; }
+
+    a { color: var(--accent2); }
+    a:hover { color: #fff; }
+
+    strong { color: #fff; font-weight: 600; }
+
+    /* ── Tables ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 14px;
+    }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+
+    code {
+      font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+      font-size: 13px;
+      background: var(--code-bg);
+      color: #c9d1f5;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    pre code { background: none; padding: 0; font-size: 13px; }
+
+    /* ── Callout boxes ── */
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: rgba(124,106,247,.08);
+      padding: 12px 16px;
+      border-radius: 0 6px 6px 0;
+      margin: 16px 0 24px;
+      font-size: 14px;
+    }
+    .callout.green  { border-color: var(--green);  background: rgba(78,202,139,.07); }
+    .callout.yellow { border-color: var(--yellow); background: rgba(245,197,66,.07); }
+    .callout.red    { border-color: var(--red);    background: rgba(240,112,112,.07); }
+
+    /* ── Step list ── */
+    ol.steps { padding-left: 0; list-style: none; counter-reset: step; }
+    ol.steps > li {
+      counter-increment: step;
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+      align-items: flex-start;
+    }
+    ol.steps > li::before {
+      content: counter(step);
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    /* ── File tree ── */
+    .filetree {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      margin: 14px 0 24px;
+    }
+    .filetree .dir  { color: var(--accent2); }
+    .filetree .file { color: var(--text); }
+    .filetree .comment { color: var(--muted); }
+
+    /* ── Phase badge ── */
+    .phase-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+    .badge-purple { background: rgba(124,106,247,.2); color: var(--accent); }
+    .badge-blue   { background: rgba(78,173,255,.18); color: var(--accent2); }
+    .badge-green  { background: rgba(78,202,139,.18); color: var(--green); }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <nav>
+    <div class="logo">AlgoRoute</div>
+    <ul>
+      <li class="section">Overview</li>
+      <li><a href="#mental-model">C# → Haskell</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+
+      <li class="section">Phases</li>
+      <li><a href="#phase1">1 · Nix Environment</a></li>
+      <li><a href="#phase2">2 · Cabal Project</a></li>
+      <li><a href="#phase3">3 · Data Types</a></li>
+      <li><a href="#phase4">4 · Algorithms</a></li>
+      <li><a href="#phase5">5 · External APIs</a></li>
+      <li><a href="#phase6">6 · Services Layer</a></li>
+      <li><a href="#phase7">7 · Servant Handlers</a></li>
+      <li><a href="#phase8">8 · Entry Points</a></li>
+      <li><a href="#phase9">9 · Lambda Deployment</a></li>
+      <li><a href="#phase10">10 · Testing</a></li>
+
+      <li class="section">Summary</li>
+      <li><a href="#order">Port Order</a></li>
+      <li><a href="#refs">References</a></li>
+    </ul>
+  </nav>
+
+  <!-- ── Main ── -->
+  <main>
+    <h1>Haskell Rewrite Plan</h1>
+    <p class="subtitle">AlgoRoute backend · Servant + Nix + AWS Lambda</p>
+
+    <div class="callout">
+      The existing Go backend (~1,933 lines across 7 packages) will be rewritten in Haskell.
+      You have a C# background. The new backend must serve the same three HTTP endpoints,
+      run the same Dijkstra/A* algorithms, and deploy to AWS Lambda via Nix-built static binaries.
+    </div>
+
+    <!-- ── Mental model ── -->
+    <h2 id="mental-model">C# → Haskell Mental Model</h2>
+    <p>Read this table before anything else. Haskell concepts map more directly onto C# than onto Go.</p>
+    <table>
+      <tr><th>C#</th><th>Haskell</th></tr>
+      <tr><td><code>interface IRouter</code></td><td>type class <code>class Router r</code></td></tr>
+      <tr><td><code>async Task&lt;T&gt;</code></td><td><code>IO T</code> or <code>ExceptT AppError IO T</code></td></tr>
+      <tr><td><code>null</code></td><td><code>Maybe a</code></td></tr>
+      <tr><td><code>try/catch</code></td><td><code>Either e a</code> or <code>ExceptT e IO a</code></td></tr>
+      <tr><td><code>Dictionary&lt;K,V&gt;</code></td><td><code>Map K V</code> (Data.Map.Strict)</td></tr>
+      <tr><td><code>List&lt;T&gt;</code></td><td><code>[T]</code></td></tr>
+      <tr><td><code>.Select(f)</code></td><td><code>map f</code></td></tr>
+      <tr><td><code>.Where(p)</code></td><td><code>filter p</code></td></tr>
+      <tr><td><code>.Aggregate(f)</code></td><td><code>foldl f</code></td></tr>
+      <tr><td><code>class Foo { T x; }</code></td><td><code>data Foo = Foo { x :: T }</code></td></tr>
+      <tr><td><code>record Foo(T x)</code></td><td><code>data Foo = Foo { x :: T }</code></td></tr>
+      <tr><td>generic <code>&lt;T&gt;</code></td><td>type parameter <code>a</code></td></tr>
+    </table>
+
+    <!-- ── Architecture ── -->
+    <h2 id="architecture">Target Architecture</h2>
+    <div class="filetree">
+<span class="dir">backend-hs/</span>
+├── <span class="file">flake.nix</span>          <span class="comment">← Nix build (dev shell + Lambda package)</span>
+├── <span class="file">backend-hs.cabal</span>   <span class="comment">← Cabal project</span>
+├── <span class="dir">app/</span>
+│   └── <span class="file">Main.hs</span>            <span class="comment">← Entry point (local server OR Lambda)</span>
+└── <span class="dir">src/</span>
+    ├── <span class="file">Graph.hs</span>           <span class="comment">← NodeID, Node, Edge, Network</span>
+    ├── <span class="dir">Geo/</span>
+    │   ├── <span class="file">Types.hs</span>       <span class="comment">← Coord, BBox</span>
+    │   ├── <span class="file">Distance.hs</span>    <span class="comment">← Haversine formula</span>
+    │   ├── <span class="file">Geocode.hs</span>     <span class="comment">← Nominatim /search</span>
+    │   ├── <span class="file">Suggest.hs</span>     <span class="comment">← Nominatim autocomplete</span>
+    │   └── <span class="file">Reverse.hs</span>     <span class="comment">← Nominatim /reverse</span>
+    ├── <span class="dir">Overpass/</span>
+    │   ├── <span class="file">Types.hs</span>       <span class="comment">← Response, Element (sum type)</span>
+    │   └── <span class="file">Client.hs</span>      <span class="comment">← Build QL query, fetch from API</span>
+    ├── <span class="file">Mapping.hs</span>         <span class="comment">← OSM Elements → Network</span>
+    ├── <span class="dir">Routefinding/</span>
+    │   ├── <span class="file">Types.hs</span>       <span class="comment">← RouteResult</span>
+    │   ├── <span class="file">Heap.hs</span>        <span class="comment">← Indexed min-heap</span>
+    │   ├── <span class="file">Dijkstra.hs</span>
+    │   └── <span class="file">AStar.hs</span>
+    ├── <span class="dir">Services/</span>
+    │   ├── <span class="file">Cache.hs</span>       <span class="comment">← Thread-safe cache (TVar)</span>
+    │   └── <span class="file">Routing.hs</span>     <span class="comment">← Full pipeline (ExceptT)</span>
+    └── <span class="dir">API/</span>
+        ├── <span class="file">Types.hs</span>       <span class="comment">← Servant API type + JSON instances</span>
+        └── <span class="file">Handlers.hs</span>    <span class="comment">← Handler implementations</span>
+    </div>
+
+    <hr>
+
+    <!-- ── Phase 1 ── -->
+    <h2 id="phase1">Phase 1 — Nix Environment <span class="phase-badge badge-blue">Setup</span></h2>
+
+    <h3>1.1 Create <code>flake.nix</code></h3>
+    <pre><code>{
+  inputs = {
+    nixpkgs.url     = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+  };
+
+  outputs = { self, nixpkgs, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs        = nixpkgs.legacyPackages.${system};
+        hsPkgs      = pkgs.haskellPackages;
+
+        # Normal build (for local running)
+        backend = hsPkgs.callCabal2nix "backend-hs" ./backend-hs {};
+
+        # Static build (for Lambda — links against musl)
+        staticBackend = pkgs.pkgsStatic.haskellPackages
+                          .callCabal2nix "backend-hs" ./backend-hs {};
+
+        # Lambda zip: a single `bootstrap` binary in a zip file
+        lambdaZip = pkgs.runCommand "lambda.zip" {} ''
+          cp ${staticBackend}/bin/backend-hs bootstrap
+          ${pkgs.zip}/bin/zip $out bootstrap
+        '';
+      in {
+        devShells.default = pkgs.mkShell {
+          packages = with hsPkgs; [
+            ghc cabal-install
+            haskell-language-server
+            hlint fourmolu
+          ];
+        };
+        packages.default = backend;
+        packages.lambda  = lambdaZip;
+      }
+    );
+}</code></pre>
+
+    <h3>1.2 Enable Nix flakes (one-time)</h3>
+    <p>Add to <code>/etc/nix/nix.conf</code>:</p>
+    <pre><code>experimental-features = nix-command flakes</code></pre>
+
+    <h3>1.3 Enter dev shell</h3>
+    <pre><code>nix develop ./backend-hs    # gives GHC + cabal + HLS</code></pre>
+
+    <!-- ── Phase 2 ── -->
+    <h2 id="phase2">Phase 2 — Cabal Project <span class="phase-badge badge-blue">Setup</span></h2>
+
+    <h3>2.1 Key cabal settings</h3>
+    <ul style="margin:0 0 14px 20px;">
+      <li><code>default-language: GHC2021</code> — enables many useful extensions by default</li>
+      <li>Executable <code>backend-hs</code> with <code>-DLAMBDA</code> flag for Lambda entry point</li>
+      <li>Executable <code>backend-hs-local</code> for local Warp server</li>
+    </ul>
+
+    <h3>2.2 Dependencies</h3>
+    <pre><code>build-depends:
+  base, text, bytestring, containers, unordered-containers,
+  servant-server, wai, warp,           -- HTTP server
+  wai-handler-hal,                     -- Lambda adapter
+  http-client, http-client-tls,        -- Outbound HTTP
+  aeson,                               -- JSON
+  async, stm,                          -- Concurrency
+  optparse-applicative,                -- CLI flags
+  mtl,                                 -- ExceptT
+  case-insensitive, http-types,        -- HTTP utilities
+  wai-cors,                            -- CORS middleware</code></pre>
+
+    <!-- ── Phase 3 ── -->
+    <h2 id="phase3">Phase 3 — Data Types <span class="phase-badge badge-green">No IO · Start here</span></h2>
+
+    <div class="callout green">Start with types — they have no dependencies and force you to understand the domain before writing any logic.</div>
+
+    <h3>3.1 <code>Graph.hs</code></h3>
+    <pre><code>type NodeID = Int64
+
+data Coord   = Coord   { lat :: Double, lon :: Double }
+data Node    = Node    { nodeId :: NodeID, coord :: Coord }
+data Edge    = Edge    { from, to :: NodeID, weight :: Double,
+                         wayId :: Int64, name :: Text }
+data Network = Network { nodes         :: Map NodeID Node
+                       , adjacencyList :: Map NodeID [Edge] }</code></pre>
+
+    <h3>3.2 <code>Overpass/Types.hs</code></h3>
+    <p>Replace Go's string-tagged <code>Element</code> with a proper sum type (C# discriminated union):</p>
+    <pre><code>data Element
+  = NodeElement { elemId   :: Int64
+                , elemLat  :: Double
+                , elemLon  :: Double
+                , elemTags :: Map Text Text }
+  | WayElement  { elemId      :: Int64
+                , elemNodeIds :: [Int64]
+                , elemTags    :: Map Text Text }
+
+-- Custom FromJSON instance: parse "type" field to pick constructor</code></pre>
+
+    <h3>3.3 <code>API/Types.hs</code> — Servant API type</h3>
+    <p>The entire API surface is declared as a single type. Servant uses this to generate both the server routing and (optionally) a typed client.</p>
+    <pre><code>type API =
+       "api" :> "route"
+         :> ReqBody '[JSON] RouteRequest
+         :> Post    '[JSON] RouteResponse
+  :<|> "api" :> "suggest"
+         :> QueryParam "q" Text
+         :> Get     '[JSON] [SuggestResult]
+  :<|> "api" :> "reverse"
+         :> QueryParam "lat" Double
+         :> QueryParam "lon" Double
+         :> Get     '[JSON] ReverseResponse
+
+-- JSON shapes matching the existing API exactly:
+data RouteRequest    = RouteRequest    { origin, destination, algorithm :: Text }
+data RouteResponse   = RouteResponse   { algorithm       :: Text
+                                       , distanceMeters  :: Double
+                                       , path            :: [PathNode]
+                                       , visitedNodes    :: [CoordJSON]
+                                       , originCoord     :: CoordJSON
+                                       , destinationCoord:: CoordJSON }
+data PathNode        = PathNode        { nodeId :: Int64, lat, lon :: Double }
+data CoordJSON       = CoordJSON       { lat, lon :: Double }
+data SuggestResult   = SuggestResult   { displayName :: Text, lat, lon :: Double }
+data ReverseResponse = ReverseResponse { address :: Text }
+
+-- Derive (ToJSON, FromJSON) for all via `deriving (Generic)` + aeson field options</code></pre>
+
+    <!-- ── Phase 4 ── -->
+    <h2 id="phase4">Phase 4 — Pure Algorithms <span class="phase-badge badge-green">No IO</span></h2>
+
+    <h3>4.1 <code>Routefinding/Heap.hs</code></h3>
+    <p>Port the indexed min-heap. Public interface:</p>
+    <pre><code>data IndexedHeap
+empty       :: IndexedHeap
+insert      :: NodeID -> Double -> IndexedHeap -> IndexedHeap
+popMin      :: IndexedHeap -> Maybe ((NodeID, Double), IndexedHeap)
+decreaseKey :: NodeID -> Double -> IndexedHeap -> IndexedHeap
+member      :: NodeID -> IndexedHeap -> Bool</code></pre>
+    <p>Internally: <code>(Seq Entry, Map NodeID Int)</code> mirroring the Go <code>[]ipqEntry + map[NodeID]int</code>.</p>
+
+    <h3>4.2 <code>Routefinding/Dijkstra.hs</code></h3>
+    <p>The Go while-loop becomes a tail-recursive helper — think of it as a <code>while</code> that returns a value instead of mutating:</p>
+    <pre><code>dijkstra :: Network -> NodeID -> NodeID -> Either RouteError RouteResult
+dijkstra net start goal = go initialHeap initialCosts Map.empty []
+  where
+    go heap costs parents visited
+      | isEmpty heap    = Left NoPathFound
+      | current == goal = Right (buildResult costs parents visited)
+      | otherwise       = go heap' costs' parents' (current : visited)
+      where
+        Just ((current, _), heap') = popMin heap
+        -- relax edges: for each neighbour, update costs and parents if shorter path found</code></pre>
+
+    <h3>4.3 <code>Routefinding/AStar.hs</code></h3>
+    <p>Identical structure to Dijkstra. Only difference: <code>priority = g + haversine current goal</code>.</p>
+
+    <h3>4.4 <code>Mapping.hs</code></h3>
+    <p>The Go nested loop becomes a <code>foldl</code> over ways — each way folds over its consecutive node pairs:</p>
+    <pre><code>buildNetwork :: BuildOptions -> [Element] -> Map Int64 Element -> Network
+buildNetwork opts ways nodeById = foldl addWay emptyNetwork ways
+  where
+    addWay net way = foldl (addEdgePair opts nodeById way) net (consecutivePairs way)</code></pre>
+
+    <!-- ── Phase 5 ── -->
+    <h2 id="phase5">Phase 5 — External APIs <span class="phase-badge badge-purple">IO</span></h2>
+
+    <h3>5.1 Shared HTTP client (<code>Env</code> record)</h3>
+    <p>Create one <code>Manager</code> at startup and thread it through the app. Think of it like a scoped singleton in C#:</p>
+    <pre><code>data Env = Env
+  { httpManager  :: Manager
+  , networkCache :: Cache
+  }
+
+newEnv :: IO Env
+newEnv = Env
+  &lt;$&gt; newManager tlsManagerSettings
+  &lt;*&gt; newCache</code></pre>
+
+    <h3>5.2 Nominatim wrappers</h3>
+    <p>Three modules (<code>Geo/Geocode.hs</code>, <code>Geo/Suggest.hs</code>, <code>Geo/Reverse.hs</code>), all following the same pattern:</p>
+    <pre><code>-- ExceptT GeoError IO a  ≈  async Task&lt;a&gt; that can throw GeoError
+geocode :: Manager -> Text -> ExceptT GeoError IO Coord</code></pre>
+    <div class="callout yellow">Nominatim returns <code>lat</code>/<code>lon</code> as JSON <strong>strings</strong>, not numbers. Use <code>read @Double . unpack</code> to convert — same as the Go code's <code>strconv.ParseFloat</code>.</div>
+
+    <h3>5.3 <code>Overpass/Client.hs</code></h3>
+    <pre><code>fetchFromAPI :: Manager -> BBox -> ExceptT OverpassError IO Response
+buildQuery   :: BBox -> Text    -- the Overpass QL string</code></pre>
+    <p>Set 30-second timeout on manager settings. Use <code>http-client</code>'s response body reader with a 10 MB cap.</p>
+
+    <!-- ── Phase 6 ── -->
+    <h2 id="phase6">Phase 6 — Services Layer <span class="phase-badge badge-purple">IO + Concurrency</span></h2>
+
+    <h3>6.1 <code>Services/Cache.hs</code> — <code>TVar</code></h3>
+    <p>Use <code>STM</code>/<code>TVar</code> instead of Go's <code>sync.RWMutex</code>. Think of it like C#'s <code>ConcurrentDictionary</code>, but transactional — <code>atomically</code> guarantees all-or-nothing, no manual lock/unlock:</p>
+    <pre><code>newtype Cache = Cache (TVar (Map BBox Response))
+
+newCache    :: IO Cache
+lookupCache :: Cache -> BBox -> IO (Maybe Response)
+insertCache :: Cache -> BBox -> Response -> IO ()</code></pre>
+
+    <h3>6.2 <code>Services/Routing.hs</code> — orchestration pipeline</h3>
+    <p>The 7-step Go pipeline maps cleanly to monadic <code>do</code>-notation. <code>ExceptT</code> short-circuits on the first failure, exactly like throwing an exception:</p>
+    <pre><code>-- ExceptT AppError IO  ≈  async Task with typed errors
+type Pipeline a = ExceptT AppError IO a
+
+routeByAddress :: Env -> AddressRouteRequest -> Pipeline AddressRouteResult
+routeByAddress env req = do
+  originCoord &lt;- geocode (httpManager env) (origin req)
+  destCoord   &lt;- geocode (httpManager env) (destination req)
+  let bbox     = paddedBBox originCoord destCoord
+  when (bboxAreaKm2 bbox > 500) (throwError AreaTooLarge)
+  response    &lt;- fetchOrCache env bbox
+  network     &lt;- liftEither (buildNetwork (mapOpts req) response)
+  startNode   &lt;- snapToNetwork network originCoord
+  goalNode    &lt;- snapToNetwork network destCoord
+  result      &lt;- liftEither (runRouter (algorithm req) network startNode goalNode)
+  return (enrichResult result originCoord destCoord network)</code></pre>
+    <p><code>liftEither</code> converts <code>Either</code> to <code>ExceptT</code> — analogous to <code>if (x == null) throw new Exception(...)</code> in C#.</p>
+
+    <!-- ── Phase 7 ── -->
+    <h2 id="phase7">Phase 7 — Servant Handlers <span class="phase-badge badge-purple">HTTP</span></h2>
+
+    <h3>7.1 <code>API/Handlers.hs</code></h3>
+    <p>The <code>server</code> function wires together all handlers. The <code>:&lt;|&gt;</code> combinator matches Servant's API type:</p>
+    <pre><code>server :: Env -> Server API
+server env = handleRoute env
+        :&lt;|&gt; handleSuggest env
+        :&lt;|&gt; handleReverse env
+
+handleRoute :: Env -> RouteRequest -> Handler RouteResponse
+handleRoute env req = do
+  result &lt;- liftIO $ runExceptT (routeByAddress env (toServiceReq req))
+  case result of
+    Left e  -> throwError (toServantError e)   -- 400 or 500
+    Right r -> return (toRouteResponse r)</code></pre>
+    <p>Servant's <code>Handler</code> is already <code>ExceptT ServerError IO</code>, so the error plumbing slots in cleanly.</p>
+
+    <h3>7.2 CORS middleware</h3>
+    <p>Add <code>wai-cors</code>; wrap the <code>Application</code> before handing to Warp or Lambda:</p>
+    <pre><code>corsApp :: Application -> Application
+corsApp = cors (const $ Just simpleCorsResourcePolicy
+  { corsOrigins        = Nothing         -- allow all
+  , corsMethods        = ["GET","POST","OPTIONS"]
+  , corsRequestHeaders = ["Content-Type"]
+  })</code></pre>
+
+    <!-- ── Phase 8 ── -->
+    <h2 id="phase8">Phase 8 — Entry Points <span class="phase-badge badge-blue">Wiring</span></h2>
+
+    <h3>8.1 Local Warp server</h3>
+    <pre><code>main :: IO ()
+main = do
+  opts &lt;- execParser cliParser       -- optparse-applicative
+  env  &lt;- newEnv
+  run (port opts) (corsApp (serve (Proxy @API) (server env)))</code></pre>
+
+    <h3>8.2 Lambda entry point (compiled with <code>-DLAMBDA</code>)</h3>
+    <p><code>wai-handler-hal</code> converts any WAI <code>Application</code> into a Lambda custom runtime handler. The HAL runtime handles the event loop — your code just provides the app:</p>
+    <pre><code>#ifdef LAMBDA
+import Network.Wai.Handler.Lambda (run)
+
+main :: IO ()
+main = do
+  env &lt;- newEnv
+  run (corsApp (serve (Proxy @API) (server env)))
+#endif</code></pre>
+    <p>Lambda invokes the binary named <code>bootstrap</code>, which calls <code>main</code>, and HAL takes it from there.</p>
+
+    <!-- ── Phase 9 ── -->
+    <h2 id="phase9">Phase 9 — AWS Lambda Deployment <span class="phase-badge badge-blue">Infra</span></h2>
+
+    <h3>9.1 Build</h3>
+    <pre><code>nix build .#lambda     # produces result/function.zip (static musl binary)</code></pre>
+
+    <h3>9.2 Option A — AWS SAM (simplest)</h3>
+    <pre><code># template.yaml
+Resources:
+  AlgoRouteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: provided.al2023
+      Handler: bootstrap
+      CodeUri: result/           # Nix output dir
+      MemorySize: 512
+      Timeout: 30
+      Events:
+        Api:
+          Type: HttpApi          # HTTP API v2 — cheaper than REST API</code></pre>
+    <pre><code>sam deploy --guided</code></pre>
+
+    <h3>9.2 Option B — Terraform</h3>
+    <pre><code>resource "aws_lambda_function" "algoroute" {
+  function_name = "algoroute"
+  runtime       = "provided.al2023"
+  handler       = "bootstrap"
+  filename      = "result/function.zip"
+  memory_size   = 512
+  timeout       = 30
+}
+
+resource "aws_apigatewayv2_api" "algoroute" {
+  name          = "algoroute"
+  protocol_type = "HTTP"
+  target        = aws_lambda_function.algoroute.invoke_arn
+}</code></pre>
+
+    <h3>9.3 Cold starts</h3>
+    <p>The static binary is ~15 MB. Typical cold start: <strong>200–400 ms</strong>. Add a scheduled EventBridge ping if you need consistent latency.</p>
+
+    <h3>9.4 In-memory cache on Lambda</h3>
+    <div class="callout green">Lambda instances are reused between invocations. The <code>TVar</code> cache <strong>persists between calls on the same instance</strong> — identical to the Go behavior. No Redis needed.</div>
+
+    <!-- ── Phase 10 ── -->
+    <h2 id="phase10">Phase 10 — Testing <span class="phase-badge badge-green">Tests</span></h2>
+    <table>
+      <tr><th>Go pattern</th><th>Haskell equivalent</th></tr>
+      <tr><td>Unit tests (<code>testing.T</code>)</td><td><code>HSpec</code> — algorithms, mapping, geo math</td></tr>
+      <tr><td><code>httptest.Server</code></td><td><code>hspec-wai</code> — HTTP handler tests</td></tr>
+      <tr><td>Request mocking</td><td><code>wai-extra</code></td></tr>
+      <tr><td>Fixture files (<code>testdata/</code>)</td><td>Reuse existing JSON fixtures directly</td></tr>
+      <tr><td>Table-driven tests</td><td>HSpec <code>it</code> blocks or QuickCheck properties</td></tr>
+    </table>
+    <div class="callout">Haskell's type system eliminates whole categories of tests: nil checks, wrong-type assertions, and unhandled error cases all become compile-time errors.</div>
+
+    <hr>
+
+    <!-- ── Port order ── -->
+    <h2 id="order">Recommended Port Order</h2>
+    <ol class="steps">
+      <li><strong>Graph.hs + Routefinding/</strong> — pure, no IO; verify algorithms pass tests first</li>
+      <li><strong>Overpass/Types.hs</strong> — get JSON parsing right using the existing fixture file</li>
+      <li><strong>Geo/ + Overpass/Client.hs</strong> — introduce IO; test against live APIs</li>
+      <li><strong>Mapping.hs</strong> — transform types; test with fixture</li>
+      <li><strong>Services/</strong> — orchestration pipeline and TVar cache</li>
+      <li><strong>API/</strong> — Servant type definition, handlers, CORS</li>
+      <li><strong>Main.hs</strong> — local Warp entry first, then Lambda entry</li>
+      <li><strong>flake.nix Lambda build</strong> — static binary + zip packaging</li>
+    </ol>
+
+    <!-- ── Refs ── -->
+    <h2 id="refs">Key References</h2>
+    <table>
+      <tr><th>Topic</th><th>Link</th></tr>
+      <tr><td>Servant tutorial</td><td><a href="https://docs.servant.dev/en/stable/tutorial/index.html">docs.servant.dev</a></td></tr>
+      <tr><td>wai-handler-hal (HAL)</td><td><a href="https://hackage.haskell.org/package/wai-handler-hal">hackage.haskell.org/package/wai-handler-hal</a></td></tr>
+      <tr><td>Nix Haskell guide</td><td><a href="https://nixos.wiki/wiki/Haskell">nixos.wiki/wiki/Haskell</a></td></tr>
+      <tr><td>AWS Lambda custom runtime</td><td><a href="https://docs.aws.amazon.com/lambda/latest/dg/runtimes-custom.html">docs.aws.amazon.com — custom runtimes</a></td></tr>
+    </table>
+
+  </main>
+</div>
+</body>
+</html>
