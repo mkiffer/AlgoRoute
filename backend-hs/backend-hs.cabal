@@ -1,0 +1,74 @@
+cabal-version:      3.0
+name:               backend-hs
+version:            0.1.0.0
+synopsis:           AlgoRoute backend — Haskell rewrite (Servant + Warp / AWS Lambda)
+build-type:         Simple
+
+-- Settings shared by every stanza below (library, executables, tests).
+-- Stanzas opt in with `import: shared`.
+common shared
+    -- GHC2021 turns on a large, modern set of language extensions by
+    -- default, so individual modules need far fewer {-# LANGUAGE #-} pragmas.
+    default-language: GHC2021
+    ghc-options:      -Wall
+    build-depends:
+        base
+      , text
+      , bytestring
+      , containers            -- Data.Map.Strict (Network, heap index)
+      , unordered-containers
+      , servant-server        -- HTTP API type + server
+      , wai                   -- the Application both entry points serve
+      , warp                  -- local HTTP server
+      , wai-handler-hal       -- WAI → AWS Lambda custom-runtime adapter
+      , http-client           -- outbound HTTP (Overpass, Nominatim)
+      , http-client-tls
+      , aeson                 -- JSON encode/decode
+      , async                 -- concurrency
+      , stm                   -- TVar-based network cache
+      , optparse-applicative  -- CLI flag parsing
+      , mtl                   -- ExceptT pipeline
+      , case-insensitive      -- HTTP header helpers
+      , http-types
+      , wai-cors              -- CORS middleware
+
+-- All domain logic lives in the library so both executables — and, later,
+-- the test suite — can depend on it without recompiling the sources.
+library
+    import:           shared
+    hs-source-dirs:   src
+    exposed-modules:
+        Graph
+        Mapping
+        Geo.Types
+        Geo.Distance
+        Geo.Geocode
+        Geo.Suggest
+        Geo.Reverse
+        Overpass.Types
+        Overpass.Client
+        Routefinding.Types
+        Routefinding.Heap
+        Routefinding.Dijkstra
+        Routefinding.AStar
+        Services.Cache
+        Services.Routing
+        API.Types
+        API.Handlers
+
+-- AWS Lambda entry point. The -DLAMBDA CPP define selects the HAL runtime
+-- branch inside Main.hs. The flake copies this binary to `bootstrap`.
+executable backend-hs
+    import:           shared
+    hs-source-dirs:   app
+    main-is:          Main.hs
+    build-depends:    backend-hs
+    cpp-options:      -DLAMBDA
+
+-- Local Warp server entry point. Same Main.hs, but without -DLAMBDA it
+-- compiles the plain `warp run` branch instead.
+executable backend-hs-local
+    import:           shared
+    hs-source-dirs:   app
+    main-is:          Main.hs
+    build-depends:    backend-hs
