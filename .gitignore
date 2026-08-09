@@ -2,6 +2,12 @@
 backend/algoroute
 frontend/dist/
 
+# Haskell build output
+backend-hs/dist-newstyle/
+backend-hs/.ghc.environment.*
+backend-hs/result
+backend-hs/result-*
+
 # Node
 frontend/node_modules/
 frontend/src/node_modules/

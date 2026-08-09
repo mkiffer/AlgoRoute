@@ -44,6 +44,13 @@
             haskell-language-server
             hlint
             fourmolu
+            # Live-recompiling watcher: `ghcid -c "cabal repl backend-hs"`
+            # shows type errors on every save, which is a much faster loop
+            # than re-running `cabal build` by hand.
+            ghcid
+            # Generates test/SpecTree.hs from the *Spec.hs files. Needed by
+            # the `spec` test-suite stanza's build-tool-depends.
+            hspec-discover
           ];
         };
 

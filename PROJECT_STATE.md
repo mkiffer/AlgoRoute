@@ -24,8 +24,10 @@
 | Frontend geo module (`geo.ts`) | Complete | `haversineMeters` mirrors Go backend; used for client-side distance validation |
 | Click-to-place routing (`main.ts`) | Complete | 2-click state machine, drag-to-reroute, 3rd-click reset, typed-input clears click state |
 | Frontend (`frontend/`) | Complete | 54 TypeScript tests — api (8), config (16), map (12), autocomplete (8), ui (10) |
+| Haskell backend (`backend-hs/`) | Complete | 161 HSpec examples. Full port of the Go backend: all 4 algorithms, all 3 endpoints, CLI mode. Byte-identical CLI output to Go on the shared fixture. Every module has a `<Module>.README.md`. Nix flake and AWS Lambda entry point are written but **unverified** — see `backend-hs/README.md`. |
 
-**Total: 70 Go + 54 TypeScript = 124 tests passing** (`go test ./...` from `backend/`; `npm test` from `frontend/`)
+**Total: 70 Go + 54 TypeScript + 161 Haskell = 285 tests passing**
+(`go test ./...` from `backend/`; `npm test` from `frontend/`; `cabal test` from `backend-hs/`)
 
 ## Known Issues
 

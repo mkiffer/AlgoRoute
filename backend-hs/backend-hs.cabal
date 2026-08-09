@@ -2,73 +2,219 @@ cabal-version:      3.0
 name:               backend-hs
 version:            0.1.0.0
 synopsis:           AlgoRoute backend — Haskell rewrite (Servant + Warp / AWS Lambda)
+description:
+    A line-for-line-in-spirit port of the AlgoRoute Go backend. Every module has
+    a sibling README.md explaining the algorithm it implements and why the
+    Haskell shape differs from the Go code it replaces.
 build-type:         Simple
+
+-- The HSpec suite loads this fixture from disk, so it must ship in the sdist.
+extra-source-files:
+    test/testdata/sample_overpass.json
+    README.md
+
+-- ---------------------------------------------------------------------------
+-- Build flags
+-- ---------------------------------------------------------------------------
+
+-- The AWS Lambda entry point needs wai-handler-hal, which pulls in a large
+-- dependency closure (the `hal` custom-runtime client and its transitive deps)
+-- that is irrelevant until you actually deploy. Keeping it behind a
+-- default-off flag means a plain `cabal build` compiles the library and the
+-- local Warp server without ever touching it.
+--
+--   cabal build              -- library + backend-hs-local
+--   cabal build -f lambda    -- also builds the Lambda `backend-hs` executable
+flag lambda
+    description: Build the AWS Lambda entry point (requires wai-handler-hal).
+    default:     False
+    manual:      True
+
+-- ---------------------------------------------------------------------------
+-- Shared settings
+-- ---------------------------------------------------------------------------
 
 -- Settings shared by every stanza below (library, executables, tests).
 -- Stanzas opt in with `import: shared`.
 common shared
     -- GHC2021 turns on a large, modern set of language extensions by
     -- default, so individual modules need far fewer {-# LANGUAGE #-} pragmas.
+    -- The two we do enable per-module are DuplicateRecordFields and
+    -- OverloadedRecordDot — see src/Geo/Types.README.md for why.
     default-language: GHC2021
-    ghc-options:      -Wall
-    build-depends:
-        base
-      , text
-      , bytestring
-      , containers            -- Data.Map.Strict (Network, heap index)
-      , unordered-containers
-      , servant-server        -- HTTP API type + server
-      , wai                   -- the Application both entry points serve
-      , warp                  -- local HTTP server
-      , wai-handler-hal       -- WAI → AWS Lambda custom-runtime adapter
-      , http-client           -- outbound HTTP (Overpass, Nominatim)
-      , http-client-tls
-      , aeson                 -- JSON encode/decode
-      , async                 -- concurrency
-      , stm                   -- TVar-based network cache
-      , optparse-applicative  -- CLI flag parsing
-      , mtl                   -- ExceptT pipeline
-      , case-insensitive      -- HTTP header helpers
-      , http-types
-      , wai-cors              -- CORS middleware
+    -- GHC2021 covers most of what this codebase needs. These three are the
+    -- gaps, and they are boilerplate rather than design decisions, so they are
+    -- switched on project-wide:
+    --   DerivingStrategies  -- write `deriving stock`/`deriving newtype`
+    --                          explicitly instead of letting GHC guess
+    --   LambdaCase          -- \case, for the many single-scrutinee matches
+    --   OverloadedStrings   -- string literals as Text without pack
+    -- The two extensions that *are* design decisions — DuplicateRecordFields
+    -- and OverloadedRecordDot — are enabled per module, with a pragma at the
+    -- top of each file that needs them. See src/Geo/Types.README.md.
+    default-extensions:
+        DerivingStrategies
+        LambdaCase
+        OverloadedStrings
+    ghc-options:      -Wall -Wcompat -Wredundant-constraints
+    build-depends:    base >=4.16 && <5
 
--- All domain logic lives in the library so both executables — and, later,
--- the test suite — can depend on it without recompiling the sources.
+-- All domain logic lives in the library so both executables — and the test
+-- suite — can depend on it without recompiling the sources.
 library
     import:           shared
     hs-source-dirs:   src
     exposed-modules:
-        Graph
-        Mapping
+        -- Application wiring: the environment record and the error ADT.
+        App.Env
+        App.Error
+
+        -- Pure geographic primitives.
         Geo.Types
         Geo.Distance
+        Geo.BBox
+
+        -- Nominatim-backed geocoding (IO).
+        Geo.Nominatim
         Geo.Geocode
         Geo.Suggest
         Geo.Reverse
+
+        -- The routing graph.
+        Graph
+        Graph.Snap
+
+        -- OpenStreetMap ingestion.
         Overpass.Types
         Overpass.Client
+        Mapping
+
+        -- Shortest-path algorithms.
         Routefinding.Types
         Routefinding.Heap
+        Routefinding.Search
         Routefinding.Dijkstra
         Routefinding.AStar
+        Routefinding.GreedyBestFirst
+        Routefinding.Bidirectional
+        Routefinding.Router
+
+        -- Orchestration.
         Services.Cache
         Services.Routing
+
+        -- HTTP surface.
         API.Types
         API.Handlers
+    -- aeson            JSON encode/decode
+    -- containers       Data.Map.Strict (Network, heap index) and Data.Sequence
+    -- http-client(-tls) outbound HTTP to Overpass and Nominatim
+    -- http-types       status codes and query-string rendering
+    -- mtl              the ReaderT + ExceptT pipeline
+    -- servant(-server) the type-level API DSL and its server interpretation
+    -- stm              TVar-backed network cache
+    -- wai-app-static   serveDirectoryFileServer for the built frontend
+    -- wai-cors         CORS middleware
+    build-depends:
+        aeson
+      , bytestring
+      , containers
+      , http-client
+      , http-client-tls
+      , http-types
+      , mtl
+      , servant
+      , servant-server
+      , stm
+      , text
+      , transformers
+      , wai
+      , wai-app-static
+      , wai-cors
 
--- AWS Lambda entry point. The -DLAMBDA CPP define selects the HAL runtime
--- branch inside Main.hs. The flake copies this binary to `bootstrap`.
-executable backend-hs
-    import:           shared
-    hs-source-dirs:   app
-    main-is:          Main.hs
-    build-depends:    backend-hs
-    cpp-options:      -DLAMBDA
-
--- Local Warp server entry point. Same Main.hs, but without -DLAMBDA it
--- compiles the plain `warp run` branch instead.
+-- Local Warp server entry point. This is the executable you run day to day.
+--
+-- -threaded is not optional: Warp's request timeout manager needs GHC's
+-- threaded runtime, and without it the server dies on its first request with
+-- "the TimerManager requires linking against the threaded runtime". -N then
+-- tells that runtime to use every core.
 executable backend-hs-local
     import:           shared
     hs-source-dirs:   app
     main-is:          Main.hs
-    build-depends:    backend-hs
+    ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+    build-depends:
+        backend-hs
+      , optparse-applicative
+      , text
+      , wai
+      , warp
+
+-- AWS Lambda entry point. The -DLAMBDA CPP define selects the HAL runtime
+-- branch inside Main.hs; the flake copies this binary to `bootstrap`.
+-- Only built with `-f lambda`.
+executable backend-hs
+    import:           shared
+    hs-source-dirs:   app
+    main-is:          Main.hs
+    cpp-options:      -DLAMBDA
+    ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+    build-depends:
+        backend-hs
+      , optparse-applicative
+      , text
+      , wai
+      , warp
+    if flag(lambda)
+        build-depends: wai-handler-hal
+    else
+        buildable:     False
+
+-- HSpec suite, ported from the Go tests in backend/**/tests/.
+-- Spec.hs is a one-line hspec-discover shim, so adding a new *Spec.hs file
+-- under test/ is all that is needed to have it run.
+--
+-- The HTTP-level tests drive a real Warp server (Network.Wai.Handler.Warp's
+-- testWithApplication) and talk to it with http-client, rather than using
+-- hspec-wai to invoke the Application in-process. That keeps them honest about
+-- the whole stack — CORS middleware, content negotiation, status codes — and
+-- is the direct equivalent of Go's httptest.Server.
+test-suite spec
+    import:           shared
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Spec.hs
+    ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+    build-tool-depends: hspec-discover:hspec-discover
+    other-modules:
+        SpecTree
+        Geo.DistanceSpec
+        Geo.BBoxSpec
+        GraphSpec
+        Graph.SnapSpec
+        Routefinding.HeapSpec
+        Routefinding.DijkstraSpec
+        Routefinding.AStarSpec
+        Routefinding.GreedyBestFirstSpec
+        Routefinding.BidirectionalSpec
+        Routefinding.RouterSpec
+        Overpass.TypesSpec
+        Overpass.ClientSpec
+        MappingSpec
+        Services.CacheSpec
+        Services.RoutingSpec
+        API.HandlersSpec
+        TestSupport
+    build-depends:
+        backend-hs
+      , QuickCheck
+      , aeson
+      , bytestring
+      , containers
+      , hspec
+      , http-client
+      , http-types
+      , stm
+      , text
+      , wai
+      , warp
