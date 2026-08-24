@@ -10,6 +10,10 @@ common shared
     -- GHC2021 turns on a large, modern set of language extensions by
     -- default, so individual modules need far fewer {-# LANGUAGE #-} pragmas.
     default-language: GHC2021
+    -- Enabled project-wide because nearly every module uses `deriving stock`.
+    -- Per-module extensions (OverloadedStrings, DuplicateRecordFields, …) stay
+    -- as {-# LANGUAGE #-} pragmas in the files that need them.
+    default-extensions: DerivingStrategies
     ghc-options:      -Wall
     build-depends:
         base
@@ -72,3 +76,36 @@ executable backend-hs-local
     hs-source-dirs:   app
     main-is:          Main.hs
     build-depends:    backend-hs
+
+-- HSpec test suite. `exitcode-stdio-1.0` = a normal executable that exits
+-- non-zero on failure, which `cabal test` interprets as a failing run.
+-- Spec.hs uses hspec-discover (a preprocessor) to auto-collect every
+-- *Spec module under test/ — add e.g. test/Routefinding/DijkstraSpec.hs
+-- and it is picked up with no wiring. `cabal test` runs it all.
+test-suite backend-hs-test
+    import:             shared
+    type:               exitcode-stdio-1.0
+    hs-source-dirs:     test
+    main-is:            Spec.hs
+    build-depends:
+        backend-hs        -- the library under test
+      , hspec             -- test framework
+      , hspec-wai         -- HTTP handler tests (Servant endpoints)
+      , QuickCheck        -- property-based tests
+      , aeson             -- decode the shared JSON fixture in tests
+      , bytestring        -- read the fixture file
+      , containers        -- Map assertions on the built Network
+      , wai               -- build the Application under test
+      , servant-server    -- serve the API in HandlersSpec
+    -- hspec-discover generates the driver, but Cabal still needs every *Spec
+    -- module listed here. Add one line per new spec file you create.
+    other-modules:
+        Geo.TypesSpec
+        Geo.DistanceSpec
+        Routefinding.HeapSpec
+        Routefinding.DijkstraSpec
+        Overpass.TypesSpec
+        MappingSpec
+        API.HandlersSpec
+    -- Runs the hspec-discover preprocessor to generate the test driver.
+    build-tool-depends: hspec-discover:hspec-discover

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlgoRoute Haskell — Stub Fill-In Order</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1d23;
+    --muted: #5b6472;
+    --border: #e2e6ec;
+    --card: #f7f9fb;
+    --code-bg: #f0f3f7;
+    --accent: #2563eb;
+    --green: #10794a;
+    --green-bg: #e6f5ec;
+    --purple: #6d28d9;
+    --purple-bg: #f0e9fd;
+    --blue: #1d4ed8;
+    --blue-bg: #e6edfd;
+    --yellow-bg: #fff7e0;
+    --yellow-br: #e8c766;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c;
+      --fg: #e6e9ef;
+      --muted: #98a2b3;
+      --border: #2a2f38;
+      --card: #1b1f26;
+      --code-bg: #1f242c;
+      --accent: #6ea8fe;
+      --green: #4ade80;
+      --green-bg: #14301f;
+      --purple: #c4b5fd;
+      --purple-bg: #241a3a;
+      --blue: #93b4fd;
+      --blue-bg: #172647;
+      --yellow-bg: #33290c;
+      --yellow-br: #7a6320;
+    }
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"]  { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .35rem; }
+  .sub { color: var(--muted); font-size: 1.02rem; margin: 0 0 2rem; }
+  h2 { font-size: 1.35rem; margin: 2.6rem 0 .8rem; padding-bottom: .35rem; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 1.08rem; margin: 1.6rem 0 .4rem; }
+  p { margin: .5rem 0; }
+  a { color: var(--accent); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .88em; background: var(--code-bg); padding: .1em .35em; border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: .85rem 1rem; overflow-x: auto; margin: .8rem 0;
+  }
+  pre code { background: none; padding: 0; font-size: .84rem; line-height: 1.5; }
+  .callout { border-radius: 8px; padding: .75rem 1rem; margin: 1rem 0; border: 1px solid var(--border); }
+  .callout.green  { background: var(--green-bg);  border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+  .callout.yellow { background: var(--yellow-bg); border-color: var(--yellow-br); }
+  .callout.blue   { background: var(--blue-bg);   border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+
+  .step {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--card);
+    padding: 1.1rem 1.25rem; margin: 1rem 0;
+  }
+  .step-head { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; margin-bottom: .3rem; }
+  .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 1.7rem; height: 1.7rem; padding: 0 .5rem;
+    background: var(--accent); color: #fff; border-radius: 999px;
+    font-size: .82rem; font-weight: 700; flex: none;
+  }
+  .step-head h3 { margin: 0; font-size: 1.05rem; }
+  .badge {
+    font-size: .68rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+    padding: .12rem .5rem; border-radius: 999px; white-space: nowrap;
+  }
+  .badge.pure { background: var(--green-bg);  color: var(--green); }
+  .badge.io   { background: var(--purple-bg); color: var(--purple); }
+  .badge.wire { background: var(--blue-bg);   color: var(--blue); }
+  .files { color: var(--muted); font-size: .86rem; margin: .15rem 0 .55rem; }
+  .files code { font-size: .82em; }
+  .kv { margin: .4rem 0 0; }
+  .kv b { font-weight: 650; }
+  .chk {
+    margin-top: .6rem; padding: .5rem .75rem; border-left: 3px solid var(--green);
+    background: var(--green-bg); border-radius: 0 6px 6px 0; font-size: .92rem;
+  }
+  .chk b { color: var(--green); }
+  ul { margin: .4rem 0; padding-left: 1.3rem; }
+  li { margin: .2rem 0; }
+  .legend { display: flex; gap: 1rem; flex-wrap: wrap; margin: .5rem 0 0; font-size: .85rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: .35rem; }
+  .dot { width: .7rem; height: .7rem; border-radius: 50%; display: inline-block; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  .foot { color: var(--muted); font-size: .85rem; margin-top: 2.5rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>AlgoRoute Haskell — Stub Fill-In Order</h1>
+  <p class="sub">A checklist for turning the 18 stubbed <code>.hs</code> files into a working backend, in dependency order. Pairs with <a href="../haskell-rewrite-plan.html">haskell-rewrite-plan.html</a> (the <em>what</em>) and <a href="TUTOR.md">TUTOR.md</a> (the <em>how to learn it</em>).</p>
+
+  <div class="callout green">
+    <p><b>Golden rule — bottom-up.</b> Fill in pure, dependency-free code first; leave IO and HTTP for last. Every stub already has its type signature, imports, and a <code>TODO</code> pointing at the Go source it ports from. Replace each <code>undefined</code> with a real body, one module at a time, and keep the thing compiling as you go.</p>
+  </div>
+
+  <h2>How each stub is laid out</h2>
+  <ul>
+    <li><b>Signature + data types are done for you</b> — the plan says "start with types," so the records, sum types, and function signatures are already written.</li>
+    <li><b>Bodies are <code>undefined</code></b> with a <code>-- TODO</code> block naming the Go function to port and sketching the approach.</li>
+    <li><b>Layering note:</b> <code>Coord</code>/<code>BBox</code> live in <code>Geo.Types</code> (not <code>Graph.hs</code> as the plan's §3.1 shows) — the <code>.cabal</code> gives us a <code>Geo.Types</code> module and it matches the Go package split. Everything imports from there.</li>
+  </ul>
+
+  <div class="legend">
+    <span><span class="dot" style="background:var(--green)"></span> Pure — no IO, TDD directly</span>
+    <span><span class="dot" style="background:var(--purple)"></span> IO / effectful</span>
+    <span><span class="dot" style="background:var(--blue)"></span> Wiring / HTTP</span>
+  </div>
+
+  <h2>The order</h2>
+
+  <div class="step">
+    <div class="step-head"><span class="num">1</span><h3>Geo.Types + Geo.Distance</h3><span class="badge pure">Pure</span></div>
+    <div class="files">Files: <code>src/Geo/Types.hs</code>, <code>src/Geo/Distance.hs</code> · Go: <code>geo/coords.go</code>, <code>geo/bbox*.go</code>, <code>geo/distance.go</code></div>
+    <p class="kv"><b>Teaches:</b> records, deriving, degrees→radians math. No dependencies at all — the true bottom of the stack.</p>
+    <p class="kv"><b>Do:</b> <code>contains</code>, <code>approxAreaKm2</code>, <code>bboxFromCoords</code>, then the Haversine <code>distanceMeters</code>.</p>
+    <div class="chk"><b>Checkpoint:</b> <code>distanceMeters</code> matches the Go <code>DistanceMeters</code> results to within a few metres in the REPL.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">2</span><h3>Graph</h3><span class="badge pure">Pure</span></div>
+    <div class="files">File: <code>src/Graph.hs</code> · Go: <code>graph/network.go</code>, <code>graph/snap.go</code></div>
+    <p class="kv"><b>Teaches:</b> the immutable-value mindset — "mutate the network" becomes "return a new <code>Network</code>." <code>Data.Map.Strict</code>, <code>Either</code> for validation.</p>
+    <p class="kv"><b>Do:</b> <code>addNode</code>, <code>addEdge</code>, <code>neighbours</code>, <code>nearestNode</code>.</p>
+    <div class="chk"><b>Checkpoint:</b> you can build a small <code>Network</code> by hand and <code>nearestNode</code> snaps a coordinate to the right vertex.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">3</span><h3>Routefinding.Types + Routefinding.Heap</h3><span class="badge pure">Pure</span></div>
+    <div class="files">Files: <code>src/Routefinding/Types.hs</code>, <code>src/Routefinding/Heap.hs</code> · Go: <code>routefinding/router.go</code>, <code>routefinding/indexed_heap.go</code></div>
+    <p class="kv"><b>Teaches:</b> sum types for results/errors; a persistent indexed min-heap (<code>Seq</code> + position <code>Map</code>) replacing an in-place slice + index map.</p>
+    <p class="kv"><b>Do:</b> <code>parseAlgorithm</code>; then <code>member</code>, <code>insert</code>, <code>popMin</code>, <code>decreaseKey</code> with private <code>siftUp</code>/<code>siftDown</code>/<code>swap</code>.</p>
+    <div class="callout yellow"><p>The heap is the fiddliest pure module — write the HSpec test <em>first</em> and keep the <code>entries</code>/<code>positions</code> maps in sync on every swap. This is the one place a subtle bug will haunt Dijkstra later.</p></div>
+    <div class="chk"><b>Checkpoint:</b> property test — repeatedly <code>popMin</code> yields priorities in non-decreasing order; <code>decreaseKey</code> re-orders correctly.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">4</span><h3>Routefinding.Dijkstra → Routefinding.AStar</h3><span class="badge pure">Pure</span></div>
+    <div class="files">Files: <code>src/Routefinding/Dijkstra.hs</code>, <code>src/Routefinding/AStar.hs</code> · Go: <code>dijkstra.go</code>, <code>astar.go</code></div>
+    <p class="kv"><b>Teaches:</b> <em>the</em> mindset shift — the Go <code>while</code>-loop that mutates costs/parents/heap becomes a tail-recursive <code>go</code> helper whose loop state <em>is</em> its arguments.</p>
+    <p class="kv"><b>Do:</b> finish <code>dijkstra</code> first (the stub sketches the <code>go</code>/<code>relax</code>/<code>reconstruct</code> shape), get it green, then do <code>astar</code> — which changes exactly one thing: heap priority <code>g</code> → <code>g + haversine</code>.</p>
+    <div class="chk"><b>Checkpoint:</b> both pass on a hand-built <code>Network</code>, and you can explain why A*'s only change is the heuristic term.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">5</span><h3>Overpass.Types</h3><span class="badge pure">Pure (JSON)</span></div>
+    <div class="files">File: <code>src/Overpass/Types.hs</code> · Go: <code>api/overpass/client.go</code></div>
+    <p class="kv"><b>Teaches:</b> sum types vs Go's string-tagged struct; a hand-written <code>FromJSON</code> that reads the <code>"type"</code> field to pick <code>NodeElement</code> vs <code>WayElement</code>.</p>
+    <p class="kv"><b>Do:</b> the <code>FromJSON Element</code> instance, <code>mkResponse</code> (derive the ways list + node index), <code>elemTag</code>.</p>
+    <div class="chk"><b>Checkpoint:</b> parsing <code>testdata/sample_overpass.json</code> yields the right <code>NodeElement</code>/<code>WayElement</code> values. <span style="color:var(--muted)">Reuse the Go fixture — don't invent a new one.</span></div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">6</span><h3>Mapping</h3><span class="badge pure">Pure</span></div>
+    <div class="files">File: <code>src/Mapping.hs</code> · Go: <code>mapping/road_mapper.go</code></div>
+    <p class="kv"><b>Teaches:</b> <code>foldl'</code> replacing nested mutating loops — fold over ways, each way folds over its consecutive node pairs, accumulating into a <code>Network</code>.</p>
+    <p class="kv"><b>Do:</b> <code>buildNetwork</code> plus the <code>oneway</code> predicates and <code>consecutivePairs</code>.</p>
+    <div class="chk"><b>Checkpoint:</b> the fixture produces the same node count, edge count, and oneway handling as the Go <code>mapping</code> tests.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">7</span><h3>Geo.Geocode → Geo.Suggest → Geo.Reverse</h3><span class="badge io">IO</span></div>
+    <div class="files">Files: <code>src/Geo/Geocode.hs</code>, <code>src/Geo/Suggest.hs</code>, <code>src/Geo/Reverse.hs</code> · Go: <code>geo/geocode.go</code>, <code>suggest.go</code>, <code>reverse.go</code></div>
+    <p class="kv"><b>Teaches:</b> your first <code>ExceptT GeoError IO</code>; <code>http-client</code> (<code>Manager</code>, requests, User-Agent header). Do <code>Geocode</code> first — the other two are the same shape.</p>
+    <p class="kv"><b>Do:</b> the pure <code>*URL</code> builders (unit-test these without a network), then the three fetchers.</p>
+    <div class="callout yellow"><p>Nominatim returns <code>lat</code>/<code>lon</code> as JSON <b>strings</b>. Parse with <code>read @Double . unpack</code> — same as Go's <code>strconv.ParseFloat</code>.</p></div>
+    <div class="chk"><b>Checkpoint:</b> a geocode returns <code>Right coord</code> for a real address and <code>Left err</code> on failure; suggest skips unparseable hits instead of failing.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">8</span><h3>Overpass.Client</h3><span class="badge io">IO</span></div>
+    <div class="files">File: <code>src/Overpass/Client.hs</code> · Go: <code>api/overpass/fetch.go</code></div>
+    <p class="kv"><b>Teaches:</b> POST with a form body, a 30 s timeout, and the 10 MB response cap; reusing the <code>FromJSON Response</code> from step 5.</p>
+    <p class="kv"><b>Do:</b> <code>buildQuery</code> (pure — test it), then <code>fetchFromAPI</code> and the <code>loadFromFile</code> helper.</p>
+    <div class="chk"><b>Checkpoint:</b> <code>buildQuery</code> emits the expected Overpass QL string; <code>loadFromFile</code> round-trips the fixture.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">9</span><h3>Services.Cache → Services.Routing</h3><span class="badge io">IO + concurrency</span></div>
+    <div class="files">Files: <code>src/Services/Cache.hs</code>, <code>src/Services/Routing.hs</code> · Go: <code>services/network_cache.go</code>, <code>address_routing.go</code></div>
+    <p class="kv"><b>Teaches:</b> <code>STM</code>/<code>TVar</code> vs a <code>sync.RWMutex</code>; the <code>Env</code> record (scoped-singleton <code>Manager</code>+<code>Cache</code>); and the payoff — the 7-step pipeline as one <code>ExceptT AppError IO</code> <code>do</code>-block that short-circuits on the first <code>Left</code>.</p>
+    <p class="kv"><b>Do:</b> <code>newCache</code>/<code>lookupCache</code>/<code>insertCache</code>, then <code>newEnv</code>, <code>routeByAddress</code>, <code>runRouter</code>.</p>
+    <div class="chk"><b>Checkpoint:</b> cache hit/miss works; the pipeline returns typed errors (<code>AreaTooLarge</code>, <code>NoRoadsFound</code>, …) matching the Go behavior.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">10</span><h3>API.Types → API.Handlers</h3><span class="badge wire">HTTP</span></div>
+    <div class="files">Files: <code>src/API/Types.hs</code>, <code>src/API/Handlers.hs</code> · Go: <code>server/server.go</code>, <code>server/handlers.go</code></div>
+    <p class="kv"><b>Teaches:</b> Servant's type-level <code>API</code> (<code>:&gt;</code>, <code>ReqBody</code>, <code>QueryParam</code>, <code>:&lt;|&gt;</code>); handlers as <code>ExceptT ServerError IO</code>; CORS via <code>wai-cors</code>.</p>
+    <p class="kv"><b>Do:</b> in <code>API.Types</code>, the snake_case JSON instances (one shared <code>Options</code>). In <code>API.Handlers</code>, <code>server</code>, the three handlers (rename the <code>_handle*</code> stubs once wired), <code>appErrorToServant</code>, and <code>corsApp</code>.</p>
+    <div class="callout yellow"><p>Keep JSON field names byte-for-byte identical to the Go tags (<code>distance_meters</code>, <code>visited_nodes</code>, <code>display_name</code>) — the existing frontend depends on them.</p></div>
+    <div class="chk"><b>Checkpoint:</b> <code>hspec-wai</code> tests hit all three endpoints and match the existing JSON contract.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">11</span><h3>app/Main.hs</h3><span class="badge wire">Wiring</span></div>
+    <div class="files">File: <code>app/Main.hs</code> · Go: <code>main.go</code></div>
+    <p class="kv"><b>Teaches:</b> <code>optparse-applicative</code> flags, <code>warp run</code>, and the <code>#ifdef LAMBDA</code> split (why the <code>.cabal</code> has two executables). Fill the non-Lambda branch first.</p>
+    <p class="kv"><b>Do:</b> <code>app</code>, <code>cliParser</code>, both <code>main</code>s.</p>
+    <div class="chk"><b>Checkpoint:</b> <code>cabal run backend-hs-local -- --port 8080</code> serves the real API and the existing frontend talks to it unchanged.</div>
+  </div>
+
+  <hr>
+
+  <h2>Dependency graph (why this order)</h2>
+  <p>Each module only imports things above it, so filling top-to-bottom means you never call an <code>undefined</code> you haven't reached yet:</p>
+  <pre><code>Geo.Types ── Geo.Distance
+   │              │
+   ▼              ▼
+ Graph ◄──────────┘
+   │
+   ├── Routefinding.Types ── Routefinding.Heap ── Dijkstra ── AStar
+   │
+   ├── Overpass.Types ── Overpass.Client ── (http-client)
+   │                          │
+   └── Mapping ◄──────────────┘
+        │
+ Geo.Geocode/Suggest/Reverse ─┐
+        │                     │
+        ▼                     ▼
+ Services.Cache ──► Services.Routing (Env, pipeline)
+                          │
+                    API.Types ──► API.Handlers
+                                       │
+                                   app/Main.hs</code></pre>
+
+  <h2>The build/feedback loop</h2>
+  <pre><code>cd backend-hs
+nix develop                 # toolchain shell — first thing, every session
+
+cabal build                 # compile everything
+cabal repl backend-hs       # load the lib, poke a function, :reload after edits
+cabal test                  # HSpec suite (once you add test/*Spec.hs)
+fourmolu -i src app         # format in place
+hlint src app               # lint</code></pre>
+  <div class="callout blue">
+    <p><b>TDD each module</b> (per <code>CLAUDE.md</code> + <code>TUTOR.md</code>): add <code>test/&lt;Module&gt;Spec.hs</code>, write a failing assertion, watch it fail, then replace the <code>undefined</code> with the minimum that passes. <code>hspec-discover</code> auto-collects any <code>*Spec</code> under <code>test/</code> — no wiring needed. Reuse the Go <code>testdata/*.json</code> fixtures as-is.</p>
+  </div>
+
+  <h2>When a stub won't compile</h2>
+  <table>
+    <tr><th>Symptom</th><th>Likely cause</th></tr>
+    <tr><td><code>Could not find module …</code></td><td>Missing <code>build-depends</code> or <code>exposed-modules</code> entry in <code>backend-hs.cabal</code> — the <code>.cabal</code> is the source of truth. Re-enter/reload the dev shell after editing it.</td></tr>
+    <tr><td><code>Ambiguous occurrence 'lat'</code></td><td>The shared-field-name gotcha. The stubs already turn on <code>DuplicateRecordFields</code> + <code>OverloadedRecordDot</code>; access via <code>coord.lat</code> to disambiguate by type. (See TUTOR.md §1a.)</td></tr>
+    <tr><td><code>Defined but not used</code> warnings</td><td>Expected while stubs are still <code>undefined</code> — harmless until the module is finished. The <code>_</code>-prefixed helper/handler stubs are named that way on purpose to suppress the warning.</td></tr>
+    <tr><td>Servant type mismatch</td><td>Handler shape doesn't match the <code>API</code> type. The compiler is checking your contract — read the expected vs actual type, don't fight it.</td></tr>
+  </table>
+
+  <p class="foot">Generated as scaffolding for the AlgoRoute Go→Haskell port. Bodies are <code>undefined</code> by design — fill them in yourself, TDD-first. See <a href="TUTOR.md">TUTOR.md</a> for the pair-programming workflow and reusable tutor prompts.</p>
+
+</div>
+</body>
+</html>

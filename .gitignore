@@ -18,6 +18,9 @@ backend/*.json
 # Claude Code local data
 .claude/
 */CLAUDE.md
+
+# Private/local notes — reference material, not shared
+**/*.local.md
 # macOS
 .DS_Store
 

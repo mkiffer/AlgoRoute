@@ -25,6 +25,11 @@ new to Haskell + Nix. Keep it open in the session.
 **Golden rule:** if Claude writes code you don't understand, stop and ask "why this, not that?"
 The point of the rewrite is to learn Haskell, not to end up with a black box.
 
+**Local reference notes.** If a `NOTES.local.md` file is present alongside this one, it holds
+curated reference material (gitignored, not shared). Ask the tutor to consult it:
+> Consult `NOTES.local.md` and align our approach to those idioms where sensible; flag where our
+> plan or code diverges, and explain the trade-off.
+
 ---
 
 ## Part 1 — Mental models
